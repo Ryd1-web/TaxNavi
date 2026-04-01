@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  # SQL Server Database
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: taxnavi-mssql
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "TaxNavi@2024"
+      MSSQL_DATABASE: "TaxNavi"
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+    networks:
+      - taxnavi-network
+
+  # Backend API
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: taxnavi-api
+    ports:
+      - "5000:5000"
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Development"
+      ConnectionStrings__DefaultConnection: "Server=mssql,1433;Database=TaxNavi;User Id=sa;Password=TaxNavi@2024;TrustServerCertificate=true;"
+      Jwt__Secret: "your-super-secret-key-that-is-at-least-32-characters-long-change-in-production"
+      Jwt__Issuer: "TaxNavi.ai"
+      Jwt__Audience: "TaxNavi.Users"
+      AZURE_BLOB_STORAGE_CONNECTION_STRING: ${AZURE_BLOB_STORAGE_CONNECTION_STRING}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY}
+    depends_on:
+      - mssql
+    networks:
+      - taxnavi-network
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "http://localhost:5000/api"
+    container_name: taxnavi-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: "http://localhost:5000/api"
+    depends_on:
+      - api
+    networks:
+      - taxnavi-network
+
+volumes:
+  mssql_data:
+
+networks:
+  taxnavi-network:
+    driver: bridge

@@ -1,0 +1,51 @@
+# .NET
+bin/
+obj/
+*.dll
+*.exe
+*.pdb
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.sln.user
+*.DotSettings.user
+.vs/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+.next/
+out/
+dist/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build output
+publish/
+PublishProfiles/
+
+# Database
+*.mdf
+*.ldf
+*.db
+
+# Logs
+logs/
+*.log
+
+# OS
+Thumbs.db
+.DS_Store
