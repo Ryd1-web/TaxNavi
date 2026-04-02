@@ -9,6 +9,7 @@ class ApiService {
       headers: {
         'Content-Type': 'application/json',
       },
+      withCredentials: true,
     });
 
     // Add request interceptor to include JWT token
@@ -60,6 +61,10 @@ class ApiService {
 
   async getReport(id: string) {
     return this.api.get(`/reports/${id}`);
+  }
+
+  async generatePdfReport(data: any) {
+    return this.api.post('/reports/generate-pdf', data);
   }
 
   // Payment endpoints

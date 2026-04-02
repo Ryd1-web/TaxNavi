@@ -23,6 +23,7 @@ public class SMEAssessmentDto
     public decimal RentAndUtilities { get; set; }
     public decimal Assets { get; set; }
     public decimal VatableIncome { get; set; }
+    public decimal WhtExposure { get; set; }
     public string BusinessName { get; set; } = string.Empty;
     public string BusinessType { get; set; } = string.Empty;
 }
@@ -67,4 +68,54 @@ public class DashboardDto
     public UserProfileDto? User { get; set; }
     public List<TaxReportDto> RecentReports { get; set; } = new();
     public decimal TotalTaxPaid { get; set; }
+}
+
+public class GeneratePdfRequest
+{
+    public string ReportType { get; set; } = string.Empty;
+    public decimal TotalIncome { get; set; }
+    public decimal AllowableDeductions { get; set; }
+    public decimal TaxLiability { get; set; }
+    public decimal ProjectedSavings { get; set; }
+}
+
+public class GeneratePdfReportDto
+{
+    public string ReportType { get; set; } = string.Empty;
+    public decimal TotalIncome { get; set; }
+    public decimal AllowableDeductions { get; set; }
+    public decimal TaxLiability { get; set; }
+    public decimal ProjectedSavings { get; set; }
+}
+
+public class RefreshTokenRequest
+{
+    public string RefreshToken { get; set; } = string.Empty;
+}
+
+public class InitiatePaymentDto
+{
+    public decimal Amount { get; set; }
+    public Guid TaxReportId { get; set; }
+    public Guid UserId { get; set; }
+    public string Description { get; set; } = string.Empty;
+}
+
+public class VerifyPaymentDto
+{
+    public string Reference { get; set; } = string.Empty;
+}
+
+public class PaymentVerificationResponse
+{
+    public bool Success { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public PaymentData? Data { get; set; }
+}
+
+public class PaymentData
+{
+    public string Reference { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
 }

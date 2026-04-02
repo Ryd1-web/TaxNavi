@@ -38,6 +38,8 @@ public interface ITaxCalculationService
     decimal CalculatePIT(decimal grossIncome, decimal allowableDeductions);
     decimal CalculateConsolidatedRelief(decimal grossIncome);
     decimal ApplyTaxBands(decimal taxableIncome);
+    Task<TaxCalculationResult> CalculateIndividualTax(decimal monthlySalary, decimal annualBonus, decimal allowances, decimal businessIncome, decimal freelanceIncome, decimal investmentIncome, decimal rentPaid, decimal loanInterest, decimal otherExpenses);
+    Task<SMETaxCalculationResult> CalculateSMETax(decimal annualTurnover, decimal operatingExpenses, decimal payrollCost, decimal assets, decimal varableIncome, decimal whtExposure);
     Task<TaxCalculationResult> CalculateIndividualTaxAsync(IndividualTaxInput input);
     Task<SMETaxCalculationResult> CalculateSMETaxAsync(SMETaxInput input);
 }
@@ -47,6 +49,9 @@ public interface IAiTaxAdvisorService
     Task<string> GenerateHumanReadableSummaryAsync(TaxReport report);
     Task<string> GenerateSavingsAdviceAsync(decimal taxLiability, decimal income);
     Task<string> GenerateSMERoadmapAsync(SMETaxCalculationResult result);
+    Task<string> GenerateHumanReadableSummary(TaxReport report);
+    Task<string> GenerateSavingsAdvice(decimal taxLiability, decimal income);
+    Task<string> GenerateSMERoadmap(SMETaxCalculationResult result);
 }
 
 public interface IPdfService
@@ -68,6 +73,13 @@ public interface IAuthenticationService
     Task<TokenRefreshResponse> RefreshTokenAsync(string refreshToken);
     string GenerateJwtToken(User user);
     string GenerateRefreshToken();
+}
+
+public interface IBlobStorageService
+{
+    Task<string> UploadFileAsync(byte[] fileContent, string fileName, string containerName = "tax-reports");
+    Task<byte[]> DownloadFileAsync(string fileName, string containerName = "tax-reports");
+    Task<bool> DeleteFileAsync(string fileName, string containerName = "tax-reports");
 }
 
 // DTOs
@@ -98,6 +110,7 @@ public class IndividualTaxInput
     public decimal FreelanceIncome { get; set; }
     public decimal InvestmentIncome { get; set; }
     public decimal RentPaid { get; set; }
+    public decimal LoanInterest { get; set; }
     public decimal OtherExpenses { get; set; }
 }
 
@@ -108,6 +121,7 @@ public class SMETaxInput
     public decimal PayrollCost { get; set; }
     public decimal Assets { get; set; }
     public decimal VatableIncome { get; set; }
+    public decimal WhtExposure { get; set; }
 }
 
 public class PaymentInitiationResponse
@@ -138,6 +152,17 @@ public class AuthenticationResponse
     public string? JwtToken { get; set; }
     public string? RefreshToken { get; set; }
     public UserDto? User { get; set; }
+    public AuthenticationData? Data { get; set; }
+}
+
+public class AuthenticationData
+{
+    public Guid UserId { get; set; }
+    public string Email { get; set; } = string.Empty;
+    public string FirstName { get; set; } = string.Empty;
+    public string? JwtToken { get; set; }
+    public string? RefreshToken { get; set; }
+    public int ExpiresIn { get; set; } = 3600;
 }
 
 public class UserDto
@@ -150,6 +175,20 @@ public class UserDto
 }
 
 public class TokenRefreshResponse
+{
+    public bool Success { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public TokenRefreshData? Data { get; set; }
+}
+
+public class TokenRefreshData
+{
+    public string JwtToken { get; set; } = string.Empty;
+    public string RefreshToken { get; set; } = string.Empty;
+    public int ExpiresIn { get; set; } = 3600;
+}
+
+public class TokenRefreshResponseOld
 {
     public string JwtToken { get; set; } = string.Empty;
     public string RefreshToken { get; set; } = string.Empty;

@@ -11,6 +11,7 @@ export default function SMETaxPage() {
   const router = useRouter();
   const { isAuthenticated, user, logout } = useAuth();
   const [formData, setFormData] = useState<SMETaxData>({
+    userId: user?.id || '',
     businessName: '',
     businessType: '',
     annualTurnover: 0,
@@ -29,6 +30,12 @@ export default function SMETaxPage() {
       router.push('/auth/login');
     }
   }, [isAuthenticated, router]);
+
+  useEffect(() => {
+    if (user?.id) {
+      setFormData(prev => ({ ...prev, userId: user.id }));
+    }
+  }, [user?.id]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;

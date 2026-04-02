@@ -11,6 +11,7 @@ export default function IndividualTaxPage() {
   const router = useRouter();
   const { isAuthenticated, user, logout } = useAuth();
   const [formData, setFormData] = useState<IndividualTaxData>({
+    userId: user?.id || '',
     monthlySalary: 0,
     annualBonus: 0,
     allowances: 0,
@@ -23,6 +24,7 @@ export default function IndividualTaxPage() {
   });
   const [result, setResult] = useState<TaxCalculationResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -30,6 +32,12 @@ export default function IndividualTaxPage() {
       router.push('/auth/login');
     }
   }, [isAuthenticated, router]);
+
+  useEffect(() => {
+    if (user?.id) {
+      setFormData(prev => ({ ...prev, userId: user.id }));
+    }
+  }, [user?.id]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -51,6 +59,34 @@ export default function IndividualTaxPage() {
       setError(err.response?.data?.message || 'Failed to calculate tax');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleGenerateReport = async () => {
+    if (!result) return;
+    
+    setIsGeneratingReport(true);
+    try {
+      const response = await apiService.generatePdfReport({
+        reportType: 'Individual',
+        totalIncome: result.totalIncome,
+        allowableDeductions: result.allowableDeductions,
+        taxLiability: result.taxLiability,
+        projectedSavings: result.projectedSavings,
+      });
+      
+      if (response.data.data.pdfUrl) {
+        const link = document.createElement('a');
+        link.href = response.data.data.pdfUrl;
+        link.download = `tax-report-${result.reportId || new Date().getTime()}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to generate report');
+    } finally {
+      setIsGeneratingReport(false);
     }
   };
 
@@ -228,11 +264,19 @@ export default function IndividualTaxPage() {
               )}
 
               {result.savingsAdvice && (
-                <div className="bg-white rounded-lg p-4">
+                <div className="bg-white rounded-lg p-4 mb-4">
                   <h3 className="font-semibold mb-2">Optimization Tips</h3>
                   <p className="text-sm text-gray-700 whitespace-pre-wrap">{result.savingsAdvice}</p>
                 </div>
               )}
+
+              <button
+                onClick={handleGenerateReport}
+                disabled={isGeneratingReport}
+                className="btn btn-success w-full"
+              >
+                {isGeneratingReport ? 'Generating Report...' : '📥 Generate & Download PDF Report'}
+              </button>
             </div>
           )}
         </div>

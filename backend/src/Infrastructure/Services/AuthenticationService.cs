@@ -8,6 +8,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.IdentityModel.Tokens;
 using BCrypt.Net;
+using Microsoft.Extensions.Configuration;
 
 public class AuthenticationService : IAuthenticationService
 {
@@ -16,12 +17,18 @@ public class AuthenticationService : IAuthenticationService
     private readonly string _jwtIssuer;
     private readonly string _jwtAudience;
 
-    public AuthenticationService(IUserRepository userRepository)
+    public AuthenticationService(IUserRepository userRepository, IConfiguration configuration)
     {
         _userRepository = userRepository;
-        _jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET") ?? "your-secret-key-change-in-production-1234567890";
-        _jwtIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER") ?? "TaxNavi.ai";
-        _jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE") ?? "TaxNavi.Users";
+        _jwtSecret = configuration["Jwt:Secret"]
+            ?? Environment.GetEnvironmentVariable("JWT_SECRET")
+            ?? "your-super-secret-key-that-is-at-least-32-characters-long-change-in-production";
+        _jwtIssuer = configuration["Jwt:Issuer"]
+            ?? Environment.GetEnvironmentVariable("JWT_ISSUER")
+            ?? "TaxNavi.ai";
+        _jwtAudience = configuration["Jwt:Audience"]
+            ?? Environment.GetEnvironmentVariable("JWT_AUDIENCE")
+            ?? "TaxNavi.Users";
     }
 
     public async Task<AuthenticationResponse> RegisterAsync(RegisterRequest request)
@@ -68,6 +75,15 @@ public class AuthenticationService : IAuthenticationService
                 FirstName = user.FirstName,
                 LastName = user.LastName,
                 UserType = user.UserType
+            },
+            Data = new AuthenticationData
+            {
+                UserId = user.Id,
+                Email = user.Email,
+                FirstName = user.FirstName,
+                JwtToken = token,
+                RefreshToken = refreshToken,
+                ExpiresIn = 3600
             }
         };
     }
@@ -110,6 +126,15 @@ public class AuthenticationService : IAuthenticationService
                 FirstName = user.FirstName,
                 LastName = user.LastName,
                 UserType = user.UserType
+            },
+            Data = new AuthenticationData
+            {
+                UserId = user.Id,
+                Email = user.Email,
+                FirstName = user.FirstName,
+                JwtToken = token,
+                RefreshToken = refreshToken,
+                ExpiresIn = 3600
             }
         };
     }
@@ -121,8 +146,14 @@ public class AuthenticationService : IAuthenticationService
 
         return await Task.FromResult(new TokenRefreshResponse
         {
-            JwtToken = "new-jwt-token", // This would be properly implemented
-            RefreshToken = GenerateRefreshToken()
+            Success = true,
+            Message = "Token refreshed successfully",
+            Data = new TokenRefreshData
+            {
+                JwtToken = "new-jwt-token", // This would be properly implemented
+                RefreshToken = GenerateRefreshToken(),
+                ExpiresIn = 3600
+            }
         });
     }
 

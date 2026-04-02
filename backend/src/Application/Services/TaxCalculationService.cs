@@ -163,4 +163,65 @@ public class TaxCalculationService : ITaxCalculationService
 
         return roadmap;
     }
+
+    public decimal CalculatePAYE(decimal monthlySalary)
+    {
+        var annualSalary = monthlySalary * 12;
+        var consolidatedRelief = CalculateConsolidatedRelief(annualSalary);
+        var taxableIncome = Math.Max(0, annualSalary - consolidatedRelief);
+        var annualTax = ApplyTaxBands(taxableIncome);
+        return annualTax / 12; // Monthly PAYE
+    }
+
+    public decimal CalculateVAT(decimal amount, decimal rate = 0.075m)
+    {
+        return amount * rate;
+    }
+
+    public decimal CalculateWHT(decimal amount, decimal rate = 0.05m)
+    {
+        return amount * rate;
+    }
+
+    public async Task<TaxCalculationResult> CalculateAsync(decimal grossIncome, decimal deductions)
+    {
+        return await Task.FromResult(new TaxCalculationResult
+        {
+            TaxLiability = CalculatePIT(grossIncome, deductions),
+            AllowableDeductions = deductions,
+            ConsolidatedRelief = CalculateConsolidatedRelief(grossIncome),
+            ProjectedSavings = CalculateProjectedSavings(grossIncome, CalculatePIT(grossIncome, deductions))
+        });
+    }
+
+    public Task<TaxCalculationResult> CalculateIndividualTax(decimal monthlySalary, decimal annualBonus, decimal allowances, decimal businessIncome, decimal freelanceIncome, decimal investmentIncome, decimal rentPaid, decimal loanInterest, decimal otherExpenses)
+    {
+        var input = new IndividualTaxInput
+        {
+            MonthlySalary = monthlySalary,
+            AnnualBonus = annualBonus,
+            Allowances = allowances,
+            BusinessIncome = businessIncome,
+            FreelanceIncome = freelanceIncome,
+            InvestmentIncome = investmentIncome,
+            RentPaid = rentPaid,
+            LoanInterest = loanInterest,
+            OtherExpenses = otherExpenses
+        };
+        return CalculateIndividualTaxAsync(input);
+    }
+
+    public Task<SMETaxCalculationResult> CalculateSMETax(decimal annualTurnover, decimal operatingExpenses, decimal payrollCost, decimal assets, decimal varableIncome, decimal whtExposure)
+    {
+        var input = new SMETaxInput
+        {
+            AnnualTurnover = annualTurnover,
+            OperatingExpenses = operatingExpenses,
+            PayrollCost = payrollCost,
+            Assets = assets,
+            VatableIncome = varableIncome,
+            WhtExposure = whtExposure
+        };
+        return CalculateSMETaxAsync(input);
+    }
 }

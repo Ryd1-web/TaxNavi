@@ -27,6 +27,7 @@ export interface TaxReport {
 }
 
 export interface IndividualTaxData {
+  userId: string;
   monthlySalary: number;
   annualBonus: number;
   allowances: number;
@@ -39,6 +40,7 @@ export interface IndividualTaxData {
 }
 
 export interface SMETaxData {
+  userId: string;
   businessName: string;
   businessType: string;
   annualTurnover: number;
@@ -50,6 +52,7 @@ export interface SMETaxData {
 }
 
 export interface TaxCalculationResult {
+  reportId?: string;
   taxLiability: number;
   totalIncome: number;
   allowableDeductions: number;
