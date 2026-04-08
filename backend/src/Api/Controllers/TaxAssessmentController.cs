@@ -50,11 +50,12 @@ namespace TaxNavi.Api.Controllers
                     assessment.MonthlySalary * 12 + assessment.AnnualBonus + assessment.Allowances
                 );
 
-                var totalIncome = assessment.MonthlySalary * 12 + assessment.AnnualBonus + assessment.Allowances + 
+                var totalIncome = assessment.MonthlySalary * 12 + assessment.AnnualBonus + assessment.Allowances +
                                 assessment.BusinessIncome + assessment.FreelanceIncome + assessment.InvestmentIncome;
-                
+
                 var allowableDeductions = assessment.RentPaid + assessment.LoanInterest + assessment.OtherExpenses;
-                var projectedSavings = consolidatedRelief > 0 ? consolidatedRelief * 0.1m : 0;
+                // Projected savings: 15% of tax liability through proper tax planning and deductions optimization
+                var projectedSavings = taxLiability * 0.15m;
 
                 // Create tax profile
                 var profile = new TaxProfile
@@ -122,7 +123,7 @@ namespace TaxNavi.Api.Controllers
 
                 var totalIncome = assessment.AnnualTurnover;
                 var allowableDeductions = assessment.OperatingExpenses + assessment.PayrollCost;
-                
+
                 // Determine VAT eligibility (turnover > 25 million)
                 var isVatEligible = assessment.AnnualTurnover > 25_000_000;
                 var vatLiability = isVatEligible ? assessment.VatableIncome * 0.075m : 0;
@@ -180,7 +181,7 @@ namespace TaxNavi.Api.Controllers
                         isVatEligible = isVatEligible,
                         vatLiability = vatLiability,
                         whtLiability = whtLiability,
-                        totalTaxLiability = totalTaxLiability,
+                        totalTaxObligation = totalTaxLiability,
                         projectedSavings = report.ProjectedSavings,
                         complianceRoadmap = aiRoadmap,
                         summary = aiSummary
@@ -200,7 +201,7 @@ namespace TaxNavi.Api.Controllers
             try
             {
                 var reports = await _reportRepository.GetByUserIdAsync(userId);
-                
+
                 return Ok(new
                 {
                     success = true,

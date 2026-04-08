@@ -83,7 +83,7 @@ public class AuthenticationService : IAuthenticationService
                 FirstName = user.FirstName,
                 JwtToken = token,
                 RefreshToken = refreshToken,
-                ExpiresIn = 3600
+                ExpiresIn = 86400
             }
         };
     }
@@ -134,7 +134,7 @@ public class AuthenticationService : IAuthenticationService
                 FirstName = user.FirstName,
                 JwtToken = token,
                 RefreshToken = refreshToken,
-                ExpiresIn = 3600
+                ExpiresIn = 86400
             }
         };
     }

@@ -38,6 +38,40 @@ export default function ReportDetailPage() {
     }
   }, [isAuthenticated, router, reportId]);
 
+  const handleDownloadPDF = async () => {
+    if (!report) return;
+
+    try {
+      const downloadUrl = report.pdfUrl || `/api/reports/download/${report.id}`;
+      const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000';
+      const fullUrl = downloadUrl.startsWith('http') ? downloadUrl : `${apiBase}${downloadUrl}`;
+
+      // Fetch the PDF with Authorization header
+      const token = localStorage.getItem('jwtToken');
+      const downloadResponse = await fetch(fullUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (downloadResponse.ok) {
+        const blob = await downloadResponse.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = `tax-report-${report.id}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+      } else {
+        console.error('Download failed:', downloadResponse.status);
+      }
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+    }
+  };
+
   if (!isAuthenticated) return null;
 
   if (isLoading) {
@@ -74,9 +108,18 @@ export default function ReportDetailPage() {
       <div className="container py-8">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-4xl font-bold">Tax Report</h1>
-          <Link href="/reports" className="btn btn-secondary">
-            Back to Reports
-          </Link>
+          <div className="flex gap-4">
+            <button
+              onClick={handleDownloadPDF}
+              className="btn btn-primary"
+              title="Download PDF Report"
+            >
+              📥 Download PDF
+            </button>
+            <Link href="/reports" className="btn btn-secondary">
+              Back to Reports
+            </Link>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -111,24 +154,13 @@ export default function ReportDetailPage() {
                 </div>
               </div>
             </div>
-
-            {report.pdfUrl && (
-              <div className="card">
-                <h2 className="text-xl font-bold mb-4">Download Report</h2>
-                <a href={report.pdfUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary w-full">
-                  📥 Download PDF
-                </a>
-              </div>
-            )}
           </div>
 
           <div className="card">
-            <h2 className="text-2xl font-bold mb-6">Summary</h2>
-            <div className="prose max-w-none">
-              <p className="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">
-                {report.summary || 'No summary available'}
-              </p>
-            </div>
+            <h2 className="text-2xl font-bold mb-6">Report Summary</h2>
+            <p className="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">
+              {report.summary || 'No summary available'}
+            </p>
 
             <hr className="my-6" />
 

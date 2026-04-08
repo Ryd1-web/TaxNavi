@@ -56,7 +56,7 @@ class ApiService {
 
   // Reports endpoints
   async getReports() {
-    return this.api.get('/reports');
+    return this.api.get('/reports/user');
   }
 
   async getReport(id: string) {

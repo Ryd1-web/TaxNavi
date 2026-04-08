@@ -56,7 +56,7 @@ public interface IAiTaxAdvisorService
 
 public interface IPdfService
 {
-    Task<byte[]> GenerateTaxReportPdfAsync(TaxReport report, string summary, string advice);
+    Task<byte[]> GenerateTaxReportPdfAsync(TaxReport report, string summary, string advice, string userName = "Taxpayer");
     Task<string> UploadPdfToBlobStorageAsync(byte[] pdfContent, string fileName);
 }
 

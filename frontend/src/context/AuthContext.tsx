@@ -37,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
+      credentials: 'include',
     });
 
     if (!response.ok) {
@@ -44,13 +45,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(errorData.message || 'Login failed');
     }
 
-    const data: AuthResponse = await response.json();
+    const responseData = await response.json();
+    const loginData = responseData.data;
     
-    if (data.jwtToken && data.user) {
-      localStorage.setItem('jwtToken', data.jwtToken);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      setToken(data.jwtToken);
-      setUser(data.user);
+    if (loginData.jwtToken) {
+      localStorage.setItem('jwtToken', loginData.jwtToken);
+      const user: User = {
+        id: loginData.userId,
+        email: loginData.email,
+        firstName: '',
+        lastName: '',
+        userType: 'Individual',
+      };
+      localStorage.setItem('user', JSON.stringify(user));
+      setToken(loginData.jwtToken);
+      setUser(user);
     }
   }, []);
 
@@ -65,6 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, firstName, lastName, userType }),
+      credentials: 'include',
     });
 
     if (!response.ok) {
@@ -72,13 +82,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(errorData.message || 'Registration failed');
     }
 
-    const data: AuthResponse = await response.json();
+    const responseData = await response.json();
+    const registerData = responseData.data;
     
-    if (data.jwtToken && data.user) {
-      localStorage.setItem('jwtToken', data.jwtToken);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      setToken(data.jwtToken);
-      setUser(data.user);
+    if (registerData.jwtToken) {
+      localStorage.setItem('jwtToken', registerData.jwtToken);
+      const user: User = {
+        id: registerData.userId,
+        email: registerData.email,
+        firstName: firstName,
+        lastName: lastName,
+        userType: userType,
+      };
+      localStorage.setItem('user', JSON.stringify(user));
+      setToken(registerData.jwtToken);
+      setUser(user);
     }
   }, []);
 

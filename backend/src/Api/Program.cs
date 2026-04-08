@@ -103,7 +103,7 @@ builder.Services.AddScoped<IAiTaxAdvisorService, AzureAiTaxAdvisorService>();
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 builder.Services.AddScoped<IPdfService, PdfReportService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
-builder.Services.AddScoped<BlobStorageService>();
+builder.Services.AddScoped<IBlobStorageService, BlobStorageService>();
 
 // Add Validators
 builder.Services.AddFluentValidationAutoValidation();

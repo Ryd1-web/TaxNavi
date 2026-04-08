@@ -76,12 +76,31 @@ export default function IndividualTaxPage() {
       });
       
       if (response.data.data.pdfUrl) {
-        const link = document.createElement('a');
-        link.href = response.data.data.pdfUrl;
-        link.download = `tax-report-${result.reportId || new Date().getTime()}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        // Construct the download URL using the API base URL (remove /api suffix)
+        const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000';
+        const downloadUrl = `${apiBase}${response.data.data.pdfUrl}`;
+        
+        // Fetch the PDF file directly from the backend
+        const token = localStorage.getItem('jwtToken');
+        const downloadResponse = await fetch(downloadUrl, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (downloadResponse.ok) {
+          const blob = await downloadResponse.blob();
+          const blobUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = response.data.data.fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(blobUrl);
+        } else {
+          setError('Failed to download report');
+        }
       }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to generate report');
