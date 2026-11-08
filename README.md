@@ -451,3 +451,13 @@ az webapp deployment source config-zip --resource-group taxnavi-rg --name taxnav
 **Version**: 1.0.0  
 **Last Updated**: April 2024  
 **Author**: TaxNavi Development Team
+
+## Configuration notes (2026 update)
+
+- **Database:** apply the new migration before running against an existing database:
+  `dotnet ef database update --project backend/src/Infrastructure --startup-project backend/src/Api`
+  For a throwaway local run, use `UseInMemoryDatabase=true` and `DatabaseSetup__ApplyOnStartup=true`.
+- **JWT secret:** required outside Development. Set `Jwt__Secret` (or `JWT_SECRET`) to 32+ random characters. Development falls back to a local-only key.
+- **Payments (Paystack):** see [PAYMENTS.md](PAYMENTS.md) for keys, dashboard setup, endpoints and go-live steps. Test mode is the default; nothing is unlocked without a server-verified charge.
+- **Tax rules:** see [TAX_RULES.md](TAX_RULES.md) for the versioned rule sets and items pending validation.
+- **Tests:** `dotnet test backend/TaxNavi.sln`

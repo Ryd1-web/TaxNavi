@@ -1,186 +1,136 @@
-using Microsoft.AspNetCore.Mvc;
+using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using TaxNavi.Application.DTOs;
+using TaxNavi.Application.Services;
 using TaxNavi.Domain.Interfaces;
-using TaxNavi.Domain.Entities;
 
-namespace TaxNavi.Api.Controllers
+namespace TaxNavi.Api.Controllers;
+
+[Route("api/[controller]")]
+public class PaymentsController : ApiControllerBase
 {
-    [ApiController]
-    [Route("api/[controller]")]
-    [Authorize]
-    public class PaymentsController : ControllerBase
+    private readonly IBillingService _billing;
+    private readonly IPaymentService _gateway;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<PaymentsController> _logger;
+
+    public PaymentsController(IBillingService billing, IPaymentService gateway, IConfiguration configuration, ILogger<PaymentsController> logger)
     {
-        private readonly IPaymentService _paymentService;
-        private readonly IPaymentRepository _paymentRepository;
-        private readonly ILogger<PaymentsController> _logger;
+        _billing = billing;
+        _gateway = gateway;
+        _configuration = configuration;
+        _logger = logger;
+    }
 
-        public PaymentsController(
-            IPaymentService paymentService,
-            IPaymentRepository paymentRepository,
-            ILogger<PaymentsController> logger)
+    /// <summary>
+    /// Starts a checkout for a premium report (guests welcome: supply an email and the calculation or a guest report
+    /// + access token) or for the SME plan (signed-in). Prices and the customer email are resolved server-side.
+    /// </summary>
+    [HttpPost("checkout")]
+    [HttpPost("initiate")]
+    [AllowAnonymous]
+    [EnableRateLimiting("checkout")]
+    public async Task<IActionResult> Checkout([FromBody] CheckoutRequestDto request)
+    {
+        Guid? userId = TryGetUserId(out var id) ? id : null;
+        var result = await _billing.CreateCheckoutAsync(userId, request, CheckoutUrls(_configuration));
+        return ToResponse(result);
+    }
+
+    /// <summary>Public payment status for the UI. Exposes flags only — never keys.</summary>
+    [HttpGet("config")]
+    [AllowAnonymous]
+    [DisableRateLimiting]
+    public IActionResult Config() => Success(new { enabled = _billing.PaymentsEnabled, testMode = _billing.TestMode, currency = "NGN", provider = "Paystack" });
+
+    /// <summary>Re-verifies a transaction with Paystack and fulfils it if paid. Safe to call repeatedly.</summary>
+    [HttpPost("verify")]
+    [AllowAnonymous]
+    [EnableRateLimiting("checkout")]
+    public async Task<IActionResult> Verify([FromBody] VerifyPaymentDto request)
+    {
+        Guid? userId = TryGetUserId(out var id) ? id : null;
+        return ToResponse(await _billing.VerifyAsync(userId, request.Reference));
+    }
+
+    [HttpGet("history")]
+    [Authorize]
+    public async Task<IActionResult> History()
+    {
+        if (!TryGetUserId(out var userId))
         {
-            _paymentService = paymentService;
-            _paymentRepository = paymentRepository;
-            _logger = logger;
+            return Unauthorized();
         }
 
-        [HttpPost("initiate")]
-        public async Task<IActionResult> InitiatePayment([FromBody] InitiatePaymentDto request)
+        return Success(await _billing.GetPaymentHistoryAsync(userId));
+    }
+
+    /// <summary>
+    /// Paystack webhook. The HMAC-SHA512 signature is checked over the raw body before anything is parsed;
+    /// processing is idempotent, so Paystack retries are harmless.
+    /// </summary>
+    [HttpPost("webhook/paystack")]
+    [AllowAnonymous]
+    [DisableRateLimiting]
+    [RequestSizeLimit(256 * 1024)]
+    public async Task<IActionResult> PaystackWebhook(CancellationToken cancellationToken)
+    {
+        byte[] raw;
+        using (var buffer = new MemoryStream())
         {
-            try
-            {
-                _logger.LogInformation("Initiating payment for user: {UserId}, amount: {Amount}", request.UserId, request.Amount);
-
-                var paymentRequest = new Domain.Interfaces.PaymentRequest
-                {
-                    Amount = request.Amount,
-                    Email = "user@example.com", // Should come from user context
-                    Reference = $"TAX-{Guid.NewGuid():N}"
-                };
-
-                var result = await _paymentService.InitiatePaymentAsync(paymentRequest);
-
-                if (string.IsNullOrEmpty(result.Reference))
-                {
-                    return BadRequest(new { success = false, message = "Failed to initiate payment" });
-                }
-
-                // Save payment record
-                var payment = new Payment
-                {
-                    Id = Guid.NewGuid(),
-                    UserId = request.UserId,
-                    Amount = request.Amount,
-                    Status = "Pending",
-                    Reference = result.Reference,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                await _paymentRepository.AddAsync(payment);
-                await _paymentRepository.SaveChangesAsync();
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "Payment initiated successfully",
-                    data = new
-                    {
-                        reference = result.Reference,
-                        authorizationUrl = result.AuthorizationUrl,
-                        accessCode = result.AccessCode,
-                        amount = request.Amount
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error initiating payment");
-                return StatusCode(500, new { success = false, message = "An error occurred while initiating payment" });
-            }
+            await Request.Body.CopyToAsync(buffer, cancellationToken);
+            raw = buffer.ToArray();
         }
 
-        [HttpPost("verify")]
-        [AllowAnonymous]
-        public async Task<IActionResult> VerifyPayment([FromBody] VerifyPaymentDto request)
+        if (!_gateway.IsValidWebhookSignature(raw, Request.Headers["x-paystack-signature"]))
         {
-            try
-            {
-                _logger.LogInformation("Verifying payment with reference: {Reference}", request.Reference);
-
-                var result = await _paymentService.VerifyPaymentAsync(request.Reference);
-
-                if (!result.Success)
-                {
-                    return BadRequest(new { success = false, message = "Payment verification failed" });
-                }
-
-                // Update payment record
-                var payment = await _paymentRepository.GetByReferenceAsync(request.Reference);
-
-                if (payment != null)
-                {
-                    payment.Status = result.Status ?? "Completed";
-                    await _paymentRepository.UpdateAsync(payment);
-                    await _paymentRepository.SaveChangesAsync();
-                }
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "Payment verified successfully",
-                    data = new
-                    {
-                        reference = result.Reference,
-                        status = result.Status,
-                        amount = payment?.Amount ?? 0
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error verifying payment");
-                return StatusCode(500, new { success = false, message = "An error occurred while verifying payment" });
-            }
+            _logger.LogWarning("Rejected Paystack webhook with a missing or invalid signature");
+            return Unauthorized();
         }
 
-        [HttpGet("history/{userId}")]
-        public async Task<IActionResult> GetPaymentHistory(Guid userId)
+        try
         {
-            try
-            {
-                var payments = await _paymentRepository.GetByUserIdAsync(userId);
-
-                return Ok(new
-                {
-                    success = true,
-                    data = payments.Select(p => new
-                    {
-                        id = p.Id,
-                        amount = p.Amount,
-                        status = p.Status,
-                        reference = p.Reference,
-                        createdAt = p.CreatedAt
-                    })
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving payment history");
-                return StatusCode(500, new { success = false, message = "An error occurred while retrieving payment history" });
-            }
+            var result = await _billing.HandleWebhookAsync(Encoding.UTF8.GetString(raw));
+            return Ok(new { received = true, result.EventType, result.Outcome });
         }
-
-        [HttpGet("{paymentId}")]
-        public async Task<IActionResult> GetPayment(Guid paymentId)
+        catch (JsonException)
         {
-            try
-            {
-                var payment = await _paymentRepository.GetByIdAsync(paymentId);
-
-                if (payment == null)
-                {
-                    return NotFound(new { success = false, message = "Payment not found" });
-                }
-
-                return Ok(new
-                {
-                    success = true,
-                    data = new
-                    {
-                        id = payment.Id,
-                        amount = payment.Amount,
-                        status = payment.Status,
-                        reference = payment.Reference,
-                        createdAt = payment.CreatedAt
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving payment");
-                return StatusCode(500, new { success = false, message = "An error occurred while retrieving payment" });
-            }
+            return BadRequest();
+        }
+        catch (Exception ex)
+        {
+            // Non-2xx makes Paystack retry later; the idempotency record makes the retry safe.
+            _logger.LogError(ex, "Paystack webhook processing failed");
+            return StatusCode(StatusCodes.Status500InternalServerError);
         }
     }
+
+    public static CheckoutUrls CheckoutUrls(IConfiguration configuration)
+    {
+        var frontend = (configuration["App:FrontendUrl"] ?? "http://localhost:3000").TrimEnd('/');
+        return new CheckoutUrls($"{frontend}/checkout/callback", $"{frontend}/checkout/callback");
+    }
+
+    public static IActionResult Map<T>(ControllerBase controller, BillingResult<T> result)
+    {
+        object Body(string? code) => new { success = result.Outcome == BillingOutcome.Ok, message = result.Message, code, data = result.Data };
+        return result.Outcome switch
+        {
+            BillingOutcome.Ok => controller.Ok(Body(null)),
+            BillingOutcome.NotFound => controller.NotFound(Body("NOT_FOUND")),
+            BillingOutcome.Invalid => controller.BadRequest(Body("INVALID")),
+            BillingOutcome.Unauthorized => controller.Unauthorized(Body("UNAUTHORIZED")),
+            BillingOutcome.AlreadyEntitled => controller.Conflict(Body("ALREADY_UNLOCKED")),
+            BillingOutcome.PaymentsNotConfigured => controller.StatusCode(StatusCodes.Status503ServiceUnavailable, Body("PAYMENTS_NOT_CONFIGURED")),
+            BillingOutcome.ProviderError => controller.StatusCode(StatusCodes.Status502BadGateway, Body("PROVIDER_ERROR")),
+            BillingOutcome.Pending => controller.StatusCode(StatusCodes.Status202Accepted, Body("PENDING")),
+            BillingOutcome.Cancelled => controller.StatusCode(StatusCodes.Status402PaymentRequired, Body("PAYMENT_CANCELLED")),
+            _ => controller.StatusCode(StatusCodes.Status402PaymentRequired, Body("PAYMENT_FAILED"))
+        };
+    }
+
+    private IActionResult ToResponse<T>(BillingResult<T> result) => Map(this, result);
 }

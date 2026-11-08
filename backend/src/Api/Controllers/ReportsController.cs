@@ -1,298 +1,200 @@
-using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using TaxNavi.Application.DTOs;
+using TaxNavi.Application.Services;
 using TaxNavi.Domain.Interfaces;
-using System.Security.Claims;
 
-namespace TaxNavi.Api.Controllers
+namespace TaxNavi.Api.Controllers;
+
+/// <summary>Saved reports. Every action is scoped to the authenticated user.</summary>
+[Route("api/[controller]")]
+[Authorize]
+public class ReportsController : ApiControllerBase
 {
-    [ApiController]
-    [Route("api/[controller]")]
-    [Authorize]
-    public class ReportsController : ControllerBase
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+
+    private readonly ITaxReportRepository _reports;
+    private readonly IUserRepository _users;
+    private readonly IPdfService _pdf;
+    private readonly IBillingService _billing;
+    private readonly ITaxAccessControlService _accessControl;
+    private readonly ITaxReportService _reportService;
+
+    public ReportsController(
+        ITaxReportRepository reports,
+        IUserRepository users,
+        IPdfService pdf,
+        IBillingService billing,
+        ITaxAccessControlService accessControl,
+        ITaxReportService reportService)
     {
-        private readonly IPdfService _pdfService;
-        private readonly ITaxReportRepository _reportRepository;
-        private readonly IUserRepository _userRepository;
-        private readonly IBlobStorageService _blobService;
-        private readonly ILogger<ReportsController> _logger;
+        _reports = reports;
+        _users = users;
+        _pdf = pdf;
+        _billing = billing;
+        _accessControl = accessControl;
+        _reportService = reportService;
+    }
 
-        public ReportsController(
-            IPdfService pdfService,
-            ITaxReportRepository reportRepository,
-            IUserRepository userRepository,
-            IBlobStorageService blobService,
-            ILogger<ReportsController> logger)
+    [HttpGet]
+    [HttpGet("user")]
+    public async Task<IActionResult> List()
+    {
+        if (!TryGetUserId(out var userId))
         {
-            _pdfService = pdfService;
-            _reportRepository = reportRepository;
-            _userRepository = userRepository;
-            _blobService = blobService;
-            _logger = logger;
+            return Unauthorized();
         }
 
-        [HttpPost("generate-pdf")]
-        public async Task<IActionResult> GeneratePdfReport([FromBody] GeneratePdfReportDto request)
+        var reports = await _reports.GetByUserIdAsync(userId);
+        return Success(reports.Select(r => new TaxReportListItemDto
         {
-            try
-            {
-                _logger.LogInformation("Generating PDF report for type: {ReportType}", request.ReportType);
+            Id = r.Id,
+            ReportType = r.ReportType,
+            TaxYear = r.TaxYear,
+            RuleSetId = r.RuleSetId,
+            TotalIncome = r.TotalIncome,
+            AllowableDeductions = r.AllowableDeductions,
+            TaxLiability = r.TaxLiability,
+            IsUnlocked = r.IsUnlocked,
+            CreatedAt = r.CreatedAt
+        }).ToList());
+    }
 
-                // Get UserId from JWT claims
-                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-                if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
-                {
-                    return Unauthorized(new { success = false, message = "Invalid or missing user ID in token" });
-                }
-
-                // Fetch user to get name
-                var user = await _userRepository.GetByIdAsync(userId);
-                var userName = user != null ? $"{user.FirstName} {user.LastName}" : "Taxpayer";
-
-                // Create a TaxReport object for PDF generation
-                var reportId = Guid.NewGuid();
-                var taxReport = new Domain.Entities.TaxReport
-                {
-                    Id = reportId,
-                    UserId = userId,
-                    TaxLiability = request.TaxLiability,
-                    TotalIncome = request.TotalIncome,
-                    AllowableDeductions = request.AllowableDeductions,
-                    ProjectedSavings = request.ProjectedSavings,
-                    ReportType = request.ReportType,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                // Generate PDF with user name
-                var pdfBytes = await _pdfService.GenerateTaxReportPdfAsync(
-                    taxReport,
-                    $"Tax Report - {request.ReportType}",
-                    "Consult with a tax professional for optimization strategies",
-                    userName
-                );
-
-                // Upload to blob storage
-                var fileName = $"tax-report-{reportId}.pdf";
-                var blobUrl = await _blobService.UploadFileAsync(pdfBytes, fileName, "tax-reports");
-
-                // Save report to database (without foreign key dependencies)
-                try
-                {
-                    taxReport.PdfUrl = $"/api/reports/download/{reportId}";
-                    taxReport.Summary = "Tax Report Generated";
-                    await _reportRepository.AddAsync(taxReport);
-                    await _reportRepository.SaveChangesAsync();
-                    _logger.LogInformation("Report saved to database: {ReportId}", reportId);
-                }
-                catch (Exception dbEx)
-                {
-                    _logger.LogWarning(dbEx, "Failed to save report to database, but PDF generation succeeded");
-                    // Continue even if database save fails - PDF is already generated
-                }
-
-                // Return PDF details with direct download URL
-                var downloadUrl = $"/api/reports/download/{reportId}";
-                return Ok(new
-                {
-                    success = true,
-                    message = "PDF report generated successfully",
-                    data = new
-                    {
-                        reportId = reportId,
-                        pdfUrl = downloadUrl,
-                        fileName = fileName
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error generating PDF report");
-                return StatusCode(500, new { success = false, message = $"An error occurred while generating PDF report: {ex.Message}" });
-            }
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> Get(Guid id)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized();
         }
 
-        [HttpGet("download/{id}")]
-        public async Task<IActionResult> DownloadReport(Guid id)
+        var entity = await _reports.GetForUserAsync(id, userId);
+        var snapshot = entity == null ? null : Deserialize(entity.JsonData);
+        if (entity == null || snapshot == null)
         {
-            try
-            {
-                // First, try to get the report from the database
-                var report = await _reportRepository.GetByIdAsync(id);
-                if (report == null)
-                {
-                    return NotFound(new { success = false, message = "Report not found" });
-                }
-
-                var fileName = $"tax-report-{id}.pdf";
-
-                // Try to download from blob storage
-                var fileBytes = await _blobService.DownloadFileAsync(fileName, "tax-reports");
-
-                // If file doesn't exist in blob storage, regenerate it from the stored report data
-                if (fileBytes == null || fileBytes.Length == 0)
-                {
-                    _logger.LogInformation("PDF file not found in storage, regenerating for report {ReportId}", id);
-
-                    // Get user info for the PDF header
-                    var user = await _userRepository.GetByIdAsync(report.UserId);
-                    var userName = user != null ? $"{user.FirstName} {user.LastName}" : "Taxpayer";
-
-                    // Regenerate PDF from stored report data
-                    fileBytes = await _pdfService.GenerateTaxReportPdfAsync(
-                        report,
-                        $"Tax Report - {report.ReportType}",
-                        report.Summary ?? "Consult with a tax professional for optimization strategies",
-                        userName
-                    );
-
-                    if (fileBytes == null || fileBytes.Length == 0)
-                    {
-                        return StatusCode(500, new { success = false, message = "Failed to generate PDF report" });
-                    }
-
-                    // Save the regenerated PDF to blob storage for future downloads
-                    try
-                    {
-                        await _blobService.UploadFileAsync(fileBytes, fileName, "tax-reports");
-                        _logger.LogInformation("Regenerated PDF saved to storage for report {ReportId}", id);
-                    }
-                    catch (Exception storageEx)
-                    {
-                        _logger.LogWarning(storageEx, "Failed to save regenerated PDF to storage");
-                        // Continue anyway - we have the PDF bytes to return
-                    }
-                }
-
-                return File(fileBytes, "application/pdf", fileName);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error downloading PDF report");
-                return StatusCode(500, new { success = false, message = $"An error occurred while downloading PDF report: {ex.Message}" });
-            }
+            return Failure(StatusCodes.Status404NotFound, "Report not found.");
         }
 
-        [HttpGet("{id}")]
-        public async Task<IActionResult> GetReport(Guid id)
+        var unlockedVia = await _billing.ResolveReportAccessAsync(userId, entity);
+        var response = _accessControl.BuildResponse(snapshot, unlockedVia, _billing.PaymentsEnabled, entity.Id);
+        return Success(new { createdAt = entity.CreatedAt, report = response });
+    }
+
+    [HttpGet("{id:guid}/pdf")]
+    [HttpGet("download/{id:guid}")]
+    public async Task<IActionResult> DownloadPdf(Guid id)
+    {
+        if (!TryGetUserId(out var userId))
         {
-            try
-            {
-                var report = await _reportRepository.GetByIdAsync(id);
-
-                if (report == null)
-                {
-                    return NotFound(new { success = false, message = "Report not found" });
-                }
-
-                return Ok(new
-                {
-                    success = true,
-                    data = new
-                    {
-                        id = report.Id,
-                        userId = report.UserId,
-                        createdAt = report.CreatedAt,
-                        reportType = report.ReportType,
-                        totalIncome = report.TotalIncome,
-                        taxLiability = report.TaxLiability,
-                        allowableDeductions = report.AllowableDeductions,
-                        projectedSavings = report.ProjectedSavings,
-                        pdfUrl = report.PdfUrl ?? $"/api/reports/download/{report.Id}",
-                        summary = report.Summary
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving report");
-                return StatusCode(500, new { success = false, message = "An error occurred while retrieving report" });
-            }
+            return Unauthorized();
         }
 
-        [HttpGet("user/{userId}")]
-        public async Task<IActionResult> GetUserReports(Guid userId)
+        var entity = await _reports.GetForUserAsync(id, userId);
+        if (entity == null)
         {
-            try
-            {
-                var reports = await _reportRepository.GetByUserIdAsync(userId);
-
-                return Ok(new
-                {
-                    success = true,
-                    data = reports.Select(r => new
-                    {
-                        id = r.Id,
-                        pdfUrl = r.PdfUrl,
-                        summary = r.Summary,
-                        createdAt = r.CreatedAt
-                    })
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving user reports");
-                return StatusCode(500, new { success = false, message = "An error occurred while retrieving user reports" });
-            }
+            return Failure(StatusCodes.Status404NotFound, "Report not found.");
         }
 
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteReport(Guid id)
+        if (await _billing.ResolveReportAccessAsync(userId, entity) == null)
         {
-            try
-            {
-                var report = await _reportRepository.GetByIdAsync(id);
-
-                if (report == null)
-                {
-                    return NotFound(new { success = false, message = "Report not found" });
-                }
-
-                await _reportRepository.DeleteAsync(id);
-                await _reportRepository.SaveChangesAsync();
-
-                return Ok(new { success = true, message = "Report deleted successfully" });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error deleting report");
-                return StatusCode(500, new { success = false, message = "An error occurred while deleting report" });
-            }
+            return Failure(StatusCodes.Status402PaymentRequired, "Unlock this report to download the PDF.", "PREMIUM_REQUIRED");
         }
 
-        [HttpGet("user")]
-        [Authorize]
-        public async Task<IActionResult> GetUserReports()
+        var user = await _users.GetByIdAsync(userId);
+        var name = user == null ? "Taxpayer" : $"{user.FirstName} {user.LastName}".Trim();
+        var bytes = await _pdf.GenerateTaxReportPdfAsync(entity, entity.Summary, string.Empty, name);
+        return File(bytes, "application/pdf", $"taxnavi-report-{entity.TaxYear}-{entity.Id.ToString()[..8]}.pdf");
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id)
+    {
+        if (!TryGetUserId(out var userId))
         {
-            try
-            {
-                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-                if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
-                {
-                    return Unauthorized(new { success = false, message = "Invalid or missing user ID in token" });
-                }
+            return Unauthorized();
+        }
 
-                var reports = await _reportRepository.GetByUserIdAsync(userId);
+        var entity = await _reports.GetForUserAsync(id, userId);
+        if (entity == null)
+        {
+            return Failure(StatusCodes.Status404NotFound, "Report not found.");
+        }
 
-                var reportDtos = reports.Select(r => new
-                {
-                    id = r.Id,
-                    userId = r.UserId,
-                    createdAt = r.CreatedAt,
-                    reportType = r.ReportType,
-                    totalIncome = r.TotalIncome,
-                    taxLiability = r.TaxLiability,
-                    allowableDeductions = r.AllowableDeductions,
-                    projectedSavings = r.ProjectedSavings,
-                    pdfUrl = r.PdfUrl ?? $"/api/reports/download/{r.Id}"
-                }).OrderByDescending(r => r.createdAt).ToList();
+        await _reportService.DeleteAsync(entity, HttpContext.RequestAborted);
+        return Success(null, "Report deleted");
+    }
 
-                return Ok(new { success = true, data = reportDtos });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error fetching user reports");
-                return StatusCode(500, new { success = false, message = "An error occurred while fetching reports" });
-            }
+    // -----------------------------------------------------------------------
+    // Guest reports: accessed with the X-Report-Access-Token issued at guest checkout.
+    // -----------------------------------------------------------------------
+
+    private const string AccessTokenHeader = "X-Report-Access-Token";
+
+    [HttpGet("guest/{id:guid}")]
+    [AllowAnonymous]
+    [EnableRateLimiting("calculate")]
+    public async Task<IActionResult> GetGuest(Guid id)
+    {
+        var token = Request.Headers[AccessTokenHeader].ToString();
+        var entity = await _reports.GetByIdAsync(id);
+        var snapshot = entity == null ? null : Deserialize(entity.JsonData);
+        if (entity == null || snapshot == null || !_billing.CanView(CurrentUserId(), entity, token))
+        {
+            return Failure(StatusCodes.Status404NotFound, "Report not found.");
+        }
+
+        var unlockedVia = await _billing.ResolveReportAccessAsync(CurrentUserId(), entity, token);
+        var response = _accessControl.BuildResponse(snapshot, unlockedVia, _billing.PaymentsEnabled, entity.Id);
+        return Success(new { createdAt = entity.CreatedAt, isGuest = entity.UserId == null, report = response });
+    }
+
+    [HttpGet("guest/{id:guid}/pdf")]
+    [AllowAnonymous]
+    [EnableRateLimiting("calculate")]
+    public async Task<IActionResult> GuestPdf(Guid id)
+    {
+        var token = Request.Headers[AccessTokenHeader].ToString();
+        var entity = await _reports.GetByIdAsync(id);
+        if (entity == null || !_billing.CanView(CurrentUserId(), entity, token))
+        {
+            return Failure(StatusCodes.Status404NotFound, "Report not found.");
+        }
+
+        if (await _billing.ResolveReportAccessAsync(CurrentUserId(), entity, token) == null)
+        {
+            return Failure(StatusCodes.Status402PaymentRequired, "Unlock this report to download the PDF.", "PREMIUM_REQUIRED");
+        }
+
+        var bytes = await _pdf.GenerateTaxReportPdfAsync(entity, entity.Summary, string.Empty, "Taxpayer");
+        return File(bytes, "application/pdf", $"taxnavi-report-{entity.TaxYear}-{entity.Id.ToString()[..8]}.pdf");
+    }
+
+    /// <summary>Moves a guest report (and its payments) into the signed-in account.</summary>
+    [HttpPost("{id:guid}/claim")]
+    public async Task<IActionResult> Claim(Guid id)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _billing.ClaimGuestReportAsync(userId, id, Request.Headers[AccessTokenHeader].ToString());
+        return PaymentsController.Map(this, result);
+    }
+
+    private Guid? CurrentUserId() => TryGetUserId(out var id) ? id : null;
+
+    private static FullTaxReportDto? Deserialize(string json)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<FullTaxReportDto>(json, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 }

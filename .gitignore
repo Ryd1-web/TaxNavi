@@ -17,6 +17,7 @@ node_modules/
 npm-debug.log
 yarn-error.log
 .next/
+.next-*/
 out/
 dist/
 
@@ -49,3 +50,11 @@ logs/
 # OS
 Thumbs.db
 .DS_Store
+
+# Generated tax reports contain personal financial data — never commit them
+backend/src/Api/Uploads/
+
+# Local logs
+*.log
+
+.fake

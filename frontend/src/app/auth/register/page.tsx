@@ -1,140 +1,121 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { FormEvent, Suspense, useEffect, useState } from 'react';
+import AuthLayout, { safeNext } from '@/components/layout/AuthLayout';
+import { Button } from '@/components/ui/Button';
+import { ChoiceCard, TextInput } from '@/components/ui/Form';
+import { Building, Check, UserIcon } from '@/components/ui/Icons';
+import { Alert } from '@/components/ui/Primitives';
 import { useAuth } from '@/context/AuthContext';
+import { ApiError } from '@/services/apiService';
+import { AccountType } from '@/types';
 
-export default function RegisterPage() {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
+const passwordRules = [
+  { test: (p: string) => p.length >= 8, label: 'At least 8 characters' },
+  { test: (p: string) => /[A-Z]/.test(p), label: 'An uppercase letter' },
+  { test: (p: string) => /[a-z]/.test(p), label: 'A lowercase letter' },
+  { test: (p: string) => /[0-9]/.test(p), label: 'A number' },
+];
+
+type Errors = Partial<Record<'firstName' | 'lastName' | 'email' | 'password' | 'form', string>>;
+
+function RegisterForm() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const next = safeNext(params.get('next'));
+  const { register, isAuthenticated, isLoading } = useAuth();
+  const [form, setForm] = useState({
     firstName: '',
     lastName: '',
-    userType: 'Individual',
+    email: '',
+    password: '',
+    userType: (params.get('type') === 'SME' || next.includes('type=sme') ? 'SME' : 'Individual') as AccountType,
   });
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const { register } = useAuth();
-  const router = useRouter();
+  const [errors, setErrors] = useState<Errors>({});
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && !submitting) router.replace(next);
+  }, [isLoading, isAuthenticated, next, router, submitting]);
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setError('');
-    setIsLoading(true);
+  const update = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [key]: event.target.value }));
 
+  const onSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    const nextErrors: Errors = {};
+    if (!form.firstName.trim()) nextErrors.firstName = 'Enter your first name.';
+    if (!form.lastName.trim()) nextErrors.lastName = 'Enter your last name.';
+    if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) nextErrors.email = 'Enter a valid email address.';
+    if (!passwordRules.every((rule) => rule.test(form.password))) nextErrors.password = 'Your password needs to meet all the requirements below.';
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) return;
+
+    setSubmitting(true);
     try {
-      await register(
-        formData.email,
-        formData.password,
-        formData.firstName,
-        formData.lastName,
-        formData.userType
-      );
-      router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.message || 'Registration failed');
-    } finally {
-      setIsLoading(false);
+      await register({ ...form, email: form.email.trim(), firstName: form.firstName.trim(), lastName: form.lastName.trim() });
+      router.replace(next);
+    } catch (err) {
+      setErrors({ form: (err as ApiError).message });
+      setSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
-      <div className="card w-full max-w-md">
-        <h1 className="text-3xl font-bold text-center mb-8 text-gray-800">Create Account</h1>
-
-        {error && <div className="alert alert-error mb-4">{error}</div>}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="form-label">First Name</label>
-              <input
-                type="text"
-                name="firstName"
-                className="form-input"
-                value={formData.firstName}
-                onChange={handleChange}
-                required
-              />
-            </div>
-            <div>
-              <label className="form-label">Last Name</label>
-              <input
-                type="text"
-                name="lastName"
-                className="form-input"
-                value={formData.lastName}
-                onChange={handleChange}
-                required
-              />
-            </div>
+    <AuthLayout
+      title="Create your account"
+      subtitle={
+        <>
+          Already have one?{' '}
+          <Link className="link" href={`/auth/login?next=${encodeURIComponent(next)}`}>
+            Sign in
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={onSubmit} noValidate className="space-y-5">
+        {errors.form && <Alert tone="error">{errors.form}</Alert>}
+        <fieldset>
+          <legend className="label">Account type</legend>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ChoiceCard name="userType" checked={form.userType === 'Individual'} onChange={() => setForm((f) => ({ ...f, userType: 'Individual' }))} icon={<UserIcon />} title="Personal" description="Employees & freelancers" />
+            <ChoiceCard name="userType" checked={form.userType === 'SME'} onChange={() => setForm((f) => ({ ...f, userType: 'SME' }))} icon={<Building />} title="Business" description="SMEs & companies" />
           </div>
-
-          <div>
-            <label className="form-label">Email</label>
-            <input
-              type="email"
-              name="email"
-              className="form-input"
-              value={formData.email}
-              onChange={handleChange}
-              required
-            />
-          </div>
-
-          <div>
-            <label className="form-label">Password (min. 8 characters)</label>
-            <input
-              type="password"
-              name="password"
-              className="form-input"
-              value={formData.password}
-              onChange={handleChange}
-              required
-              minLength={8}
-            />
-          </div>
-
-          <div>
-            <label className="form-label">Account Type</label>
-            <select
-              name="userType"
-              className="form-input"
-              value={formData.userType}
-              onChange={handleChange}
-            >
-              <option value="Individual">Individual</option>
-              <option value="SME">SME</option>
-            </select>
-          </div>
-
-          <button
-            type="submit"
-            className="btn btn-primary w-full"
-            disabled={isLoading}
-          >
-            {isLoading ? 'Creating account...' : 'Register'}
-          </button>
-        </form>
-
-        <div className="mt-6 text-center">
-          <p className="text-gray-600">
-            Already have an account?{' '}
-            <Link href="/auth/login" className="text-blue-600 hover:underline">
-              Login here
-            </Link>
-          </p>
+        </fieldset>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <TextInput label="First name" autoComplete="given-name" value={form.firstName} onChange={update('firstName')} error={errors.firstName} maxLength={100} />
+          <TextInput label="Last name" autoComplete="family-name" value={form.lastName} onChange={update('lastName')} error={errors.lastName} maxLength={100} />
         </div>
-      </div>
-    </div>
+        <TextInput label="Email" type="email" autoComplete="email" inputMode="email" value={form.email} onChange={update('email')} error={errors.email} />
+        <div>
+          <TextInput label="Password" type="password" autoComplete="new-password" value={form.password} onChange={update('password')} error={errors.password} maxLength={128} />
+          <ul className="mt-2.5 grid grid-cols-2 gap-1.5" aria-label="Password requirements">
+            {passwordRules.map((rule) => {
+              const ok = rule.test(form.password);
+              return (
+                <li key={rule.label} className={`flex items-center gap-1.5 text-[13px] ${ok ? 'text-brand-700' : 'text-ink-subtle'}`}>
+                  <Check size={14} strokeWidth={ok ? 3 : 2} className={ok ? '' : 'opacity-40'} />
+                  {rule.label}
+                  <span className="sr-only">{ok ? '(met)' : '(not met)'}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+        <Button type="submit" block size="lg" loading={submitting} loadingText="Creating account…">
+          Create account
+        </Button>
+        <p className="text-center text-[13px] leading-5 text-ink-subtle">We only ask for what we need to set up your account.</p>
+      </form>
+    </AuthLayout>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense>
+      <RegisterForm />
+    </Suspense>
   );
 }

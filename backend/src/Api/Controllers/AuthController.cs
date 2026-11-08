@@ -1,132 +1,64 @@
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
-using TaxNavi.Application.DTOs;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using TaxNavi.Domain.Interfaces;
+using TaxNavi.Domain.Models;
 
-namespace TaxNavi.Api.Controllers
+namespace TaxNavi.Api.Controllers;
+
+[Route("api/[controller]")]
+[EnableRateLimiting("auth")]
+public class AuthController : ApiControllerBase
 {
-    [ApiController]
-    [Route("api/[controller]")]
-    public class AuthController : ControllerBase
+    private readonly IAuthenticationService _authService;
+    private readonly ILogger<AuthController> _logger;
+
+    public AuthController(IAuthenticationService authService, ILogger<AuthController> logger)
     {
-        private readonly IAuthenticationService _authService;
-        private readonly IUserRepository _userRepository;
-        private readonly ILogger<AuthController> _logger;
-
-        public AuthController(IAuthenticationService authService, IUserRepository userRepository, ILogger<AuthController> logger)
-        {
-            _authService = authService;
-            _userRepository = userRepository;
-            _logger = logger;
-        }
-
-        [HttpPost("register")]
-        [AllowAnonymous]
-        public async Task<IActionResult> Register([FromBody] RegisterRequest request)
-        {
-            try
-            {
-                _logger.LogInformation("Register attempt for email: {Email}", request.Email);
-
-                var result = await _authService.RegisterAsync(request);
-
-                if (!result.Success)
-                {
-                    return BadRequest(new { success = false, message = result.Message });
-                }
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "User registered successfully",
-                    data = new
-                    {
-                        userId = result.Data?.UserId,
-                        email = result.Data?.Email,
-                        userName = result.Data?.FirstName
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error during registration");
-                return StatusCode(500, new { success = false, message = "An error occurred during registration" });
-            }
-        }
-
-        [HttpPost("login")]
-        [AllowAnonymous]
-        public async Task<IActionResult> Login([FromBody] LoginRequest request)
-        {
-            try
-            {
-                _logger.LogInformation("Login attempt for email: {Email}", request.Email);
-
-                var result = await _authService.LoginAsync(request);
-
-                if (!result.Success)
-                {
-                    return Unauthorized(new { success = false, message = result.Message });
-                }
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "Login successful",
-                    data = new
-                    {
-                        userId = result.Data?.UserId,
-                        email = result.Data?.Email,
-                        jwtToken = result.Data?.JwtToken,
-                        refreshToken = result.Data?.RefreshToken,
-                        expiresIn = result.Data?.ExpiresIn
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error during login");
-                return StatusCode(500, new { success = false, message = "An error occurred during login" });
-            }
-        }
-
-        [HttpPost("refresh")]
-        [AllowAnonymous]
-        public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
-        {
-            try
-            {
-                var result = await _authService.RefreshTokenAsync(request.RefreshToken ?? string.Empty);
-
-                if (!result.Success)
-                {
-                    return Unauthorized(new { success = false, message = result.Message });
-                }
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "Token refreshed successfully",
-                    data = new
-                    {
-                        jwtToken = result.Data?.JwtToken,
-                        refreshToken = result.Data?.RefreshToken,
-                        expiresIn = result.Data?.ExpiresIn
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error refreshing token");
-                return StatusCode(500, new { success = false, message = "An error occurred while refreshing token" });
-            }
-        }
-
-        [HttpGet("verify")]
-        [Authorize]
-        public IActionResult VerifyToken()
-        {
-            return Ok(new { success = true, message = "Token is valid" });
-        }
+        _authService = authService;
+        _logger = logger;
     }
+
+    [HttpPost("register")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+    {
+        var result = await _authService.RegisterAsync(request);
+        if (!result.Success)
+        {
+            return Failure(StatusCodes.Status400BadRequest, result.Message);
+        }
+
+        _logger.LogInformation("New account registered {UserId}", result.User!.Id);
+        return Success(SessionPayload(result), "Account created");
+    }
+
+    [HttpPost("login")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Login([FromBody] LoginRequest request)
+    {
+        var result = await _authService.LoginAsync(request);
+        if (!result.Success)
+        {
+            return Failure(StatusCodes.Status401Unauthorized, result.Message);
+        }
+
+        return Success(SessionPayload(result), "Signed in");
+    }
+
+    [HttpGet("verify")]
+    [Authorize]
+    [DisableRateLimiting]
+    public IActionResult VerifyToken() => Success(null, "Token is valid");
+
+    private static object SessionPayload(AuthenticationResponse result) => new
+    {
+        userId = result.User!.Id,
+        email = result.User.Email,
+        firstName = result.User.FirstName,
+        lastName = result.User.LastName,
+        userType = result.User.UserType,
+        jwtToken = result.JwtToken,
+        expiresIn = result.ExpiresIn
+    };
 }

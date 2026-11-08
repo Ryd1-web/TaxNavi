@@ -2,69 +2,210 @@
 @tailwind components;
 @tailwind utilities;
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+@layer base {
+  /* Theme tokens as RGB channels so Tailwind opacity modifiers keep working. */
+  :root {
+    color-scheme: light;
+    --surface: 255 255 255;
+    --surface-subtle: 248 250 252;
+    --surface-muted: 241 245 249;
+    --line: 226 232 240;
+    --line-strong: 203 213 225;
+    --ink: 15 23 42;
+    --ink-muted: 71 85 105;
+    --ink-subtle: 100 116 139;
+    --night: 15 23 42;
+    --hero-glow: 236 248 243;
+    /* Chart palette validated with the dataviz checker for each surface. */
+    --chart-sheltered: 42 120 214;
+    --chart-kept: 15 123 90;
+    --chart-tax: 235 104 52;
+  }
+
+  :root.dark {
+    color-scheme: dark;
+    --surface: 17 26 43;
+    --surface-subtle: 11 18 32;
+    --surface-muted: 27 37 56;
+    --line: 36 48 70;
+    --line-strong: 54 68 94;
+    --ink: 230 235 242;
+    --ink-muted: 176 187 203;
+    --ink-subtle: 139 152 172;
+    --night: 24 34 55;
+    --hero-glow: 10 52 40;
+    --chart-sheltered: 57 135 229;
+    --chart-kept: 31 158 116;
+    --chart-tax: 217 89 38;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-surface-subtle font-sans text-ink antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
+  /* Visible, consistent focus for keyboard users only. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-600 ring-offset-2 ring-offset-surface;
+  }
+
+  h1, h2, h3, h4 {
+    @apply tracking-tight text-ink;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-color: #f8f9fa;
+@layer components {
+  .container-page {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Figures: always tabular so columns of naira amounts align. */
+  .figure {
+    font-variant-numeric: tabular-nums;
+    @apply tracking-tight;
+  }
+
+  .btn {
+    @apply inline-flex min-h-[44px] items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 text-sm font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-sm {
+    @apply min-h-[36px] rounded-lg px-3 text-[13px];
+  }
+  .btn-lg {
+    @apply min-h-[52px] px-6 text-[15px];
+  }
+  .btn-primary {
+    @apply bg-brand-700 text-white hover:bg-brand-800 active:bg-brand-900 dark:bg-brand-600 dark:hover:bg-brand-700;
+  }
+  .btn-secondary {
+    @apply border border-line-strong bg-surface text-ink hover:bg-surface-muted active:bg-line;
+  }
+  .btn-ghost {
+    @apply text-ink-muted hover:bg-surface-muted hover:text-ink;
+  }
+  .btn-premium {
+    @apply bg-night text-white hover:opacity-90;
+  }
+  .btn-danger {
+    @apply border border-red-200 bg-surface text-red-700 hover:bg-red-50 dark:border-red-500/40 dark:text-red-300 dark:hover:bg-red-500/10;
+  }
+
+  .input {
+    @apply block min-h-[44px] w-full rounded-xl border border-line-strong bg-surface px-3.5 text-[15px] text-ink placeholder:text-ink-subtle/70 transition-colors hover:border-ink-subtle focus:border-brand-600 focus:shadow-focus focus:outline-none disabled:bg-surface-muted disabled:text-ink-subtle;
+  }
+  .input[aria-invalid='true'] {
+    @apply border-red-500 focus:border-red-500 focus:shadow-[0_0_0_3px_rgb(239_68_68/0.2)];
+  }
+
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-ink;
+  }
+  .hint {
+    @apply mt-1.5 text-[13px] leading-5 text-ink-subtle;
+  }
+  .error-text {
+    @apply mt-1.5 text-[13px] font-medium text-red-600 dark:text-red-400;
+  }
+
+  .card {
+    @apply rounded-2xl border border-line bg-surface shadow-card;
+  }
+
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.08em] text-ink-subtle;
+  }
+
+  .link {
+    @apply font-medium text-brand-700 underline-offset-4 hover:underline;
+  }
+
+  .hero-glow {
+    background: radial-gradient(60rem 30rem at 80% -10%, rgb(var(--hero-glow)), transparent);
+  }
 }
 
-.container {
-  @apply max-w-7xl mx-auto px-4;
+/*
+ * Dark theme remapping for the light-only palette steps (tints, status colours, brand text).
+ * Kept in one place so components keep their existing class names in both themes.
+ * Panels that are intentionally dark in both themes (bg-night, bg-brand-900) are unaffected.
+ */
+@layer utilities {
+  .dark .bg-brand-50,
+  .dark .bg-brand-50\/40,
+  .dark .bg-brand-50\/50 { background-color: rgb(31 158 116 / 0.14); }
+  .dark .bg-brand-100 { background-color: rgb(31 158 116 / 0.22); }
+  .dark .bg-brand-200 { background-color: rgb(31 158 116 / 0.35); }
+  .dark .border-brand-200,
+  .dark .ring-brand-200 { --tw-ring-color: rgb(58 169 130 / 0.35); border-color: rgb(58 169 130 / 0.35); }
+  .dark .text-brand-600,
+  .dark .text-brand-700,
+  .dark .text-brand-800 { color: #6fc8a6; }
+  .dark .border-brand-600,
+  .dark .border-brand-700 { border-color: #3aa982; }
+
+  .dark .bg-gold-50 { background-color: rgb(214 164 70 / 0.14); }
+  .dark .ring-gold-200 { --tw-ring-color: rgb(214 164 70 / 0.35); }
+  .dark .text-gold-600,
+  .dark .text-gold-800 { color: #ecc976; }
+
+  .dark .bg-emerald-50 { background-color: rgb(16 185 129 / 0.12); }
+  .dark .border-emerald-200 { border-color: rgb(16 185 129 / 0.35); }
+  .dark .ring-emerald-200 { --tw-ring-color: rgb(16 185 129 / 0.35); }
+  .dark .text-emerald-700,
+  .dark .text-emerald-800,
+  .dark .text-emerald-900 { color: #6ee7b7; }
+
+  .dark .bg-amber-50 { background-color: rgb(245 158 11 / 0.12); }
+  .dark .border-amber-200 { border-color: rgb(245 158 11 / 0.35); }
+  .dark .ring-amber-200 { --tw-ring-color: rgb(245 158 11 / 0.35); }
+  .dark .text-amber-600 { color: #fbbf24; }
+  .dark .text-amber-700,
+  .dark .text-amber-800,
+  .dark .text-amber-900 { color: #fcd34d; }
+
+  .dark .bg-red-50 { background-color: rgb(239 68 68 / 0.12); }
+  .dark .border-red-200 { border-color: rgb(239 68 68 / 0.35); }
+  .dark .ring-red-200 { --tw-ring-color: rgb(239 68 68 / 0.35); }
+  .dark .text-red-600 { color: #f87171; }
+  .dark .text-red-700,
+  .dark .text-red-900 { color: #fca5a5; }
+
+  .dark .bg-sky-50 { background-color: rgb(14 165 233 / 0.12); }
+  .dark .border-sky-200 { border-color: rgb(14 165 233 / 0.35); }
+  .dark .ring-sky-200 { --tw-ring-color: rgb(14 165 233 / 0.35); }
+  .dark .text-sky-700,
+  .dark .text-sky-800,
+  .dark .text-sky-900 { color: #7dd3fc; }
 }
 
-.btn {
-  @apply px-4 py-2 rounded font-medium transition-colors duration-200;
+/* Navigation / data-loading progress bar. */
+.nav-progress {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 60;
+  height: 2px;
+  pointer-events: none;
 }
-
-.btn-primary {
-  @apply btn bg-blue-600 text-white hover:bg-blue-700;
+.nav-progress__bar {
+  height: 100%;
+  background: #1a8c67;
+  box-shadow: 0 0 6px rgb(26 140 103 / 0.5);
+  transform-origin: left;
+  transition: transform 200ms ease-out, opacity 250ms ease-out;
 }
-
-.btn-secondary {
-  @apply btn bg-gray-300 text-gray-800 hover:bg-gray-400;
-}
-
-.btn-danger {
-  @apply btn bg-red-600 text-white hover:bg-red-700;
-}
-
-.btn-success {
-  @apply btn bg-green-600 text-white hover:bg-green-700;
-}
-
-.form-input {
-  @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500;
-}
-
-.form-label {
-  @apply block text-sm font-medium text-gray-700 mb-2;
-}
-
-.card {
-  @apply bg-white rounded-lg shadow-md p-6;
-}
-
-.alert {
-  @apply px-4 py-3 rounded-lg;
-}
-
-.alert-success {
-  @apply alert bg-green-100 text-green-700 border border-green-400;
-}
-
-.alert-error {
-  @apply alert bg-red-100 text-red-700 border border-red-400;
-}
-
-.alert-info {
-  @apply alert bg-blue-100 text-blue-700 border border-blue-400;
+.dark .nav-progress__bar {
+  background: #3aa982;
 }

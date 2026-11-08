@@ -1,81 +1,94 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { FormEvent, Suspense, useEffect, useState } from 'react';
+import AuthLayout, { safeNext } from '@/components/layout/AuthLayout';
+import { Button } from '@/components/ui/Button';
+import { TextInput } from '@/components/ui/Form';
+import { Alert } from '@/components/ui/Primitives';
 import { useAuth } from '@/context/AuthContext';
+import { ApiError } from '@/services/apiService';
 
-export default function LoginPage() {
+function LoginForm() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const next = safeNext(params.get('next'));
+  const { login, isAuthenticated, isLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
-  const router = useRouter();
+  const [showPassword, setShowPassword] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string; form?: string }>({});
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setError('');
-    setIsLoading(true);
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) router.replace(next);
+  }, [isLoading, isAuthenticated, next, router]);
 
+  const onSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    const nextErrors: typeof errors = {};
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) nextErrors.email = 'Enter a valid email address.';
+    if (!password) nextErrors.password = 'Enter your password.';
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) return;
+
+    setSubmitting(true);
     try {
-      await login(email, password);
-      router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.message || 'Login failed');
-    } finally {
-      setIsLoading(false);
+      await login(email.trim(), password);
+      router.replace(next);
+    } catch (err) {
+      setErrors({ form: (err as ApiError).message });
+      setSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
-      <div className="card w-full max-w-md">
-        <h1 className="text-3xl font-bold text-center mb-8 text-gray-800">Login to TaxNavi</h1>
-
-        {error && <div className="alert alert-error mb-4">{error}</div>}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="form-label">Email</label>
-            <input
-              type="email"
-              className="form-input"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-
-          <div>
-            <label className="form-label">Password</label>
-            <input
-              type="password"
-              className="form-input"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="btn btn-primary w-full"
-            disabled={isLoading}
-          >
-            {isLoading ? 'Logging in...' : 'Login'}
+    <AuthLayout
+      title="Welcome back"
+      subtitle={
+        <>
+          New to TaxNavi?{' '}
+          <Link className="link" href={`/auth/register?next=${encodeURIComponent(next)}`}>
+            Create a free account
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={onSubmit} noValidate className="space-y-5">
+        {errors.form && <Alert tone="error">{errors.form}</Alert>}
+        <TextInput label="Email" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} />
+        <div>
+          <TextInput
+            label="Password"
+            type={showPassword ? 'text' : 'password'}
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            error={errors.password}
+          />
+          <button type="button" className="mt-2 text-[13px] font-medium text-ink-subtle hover:text-ink" onClick={() => setShowPassword((v) => !v)} aria-pressed={showPassword}>
+            {showPassword ? 'Hide password' : 'Show password'}
           </button>
-        </form>
-
-        <div className="mt-6 text-center">
-          <p className="text-gray-600">
-            Don't have an account?{' '}
-            <Link href="/auth/register" className="text-blue-600 hover:underline">
-              Register here
-            </Link>
-          </p>
         </div>
-      </div>
-    </div>
+        <Button type="submit" block size="lg" loading={submitting} loadingText="Signing in…">
+          Sign in
+        </Button>
+      </form>
+      <p className="mt-6 text-center text-sm text-ink-subtle">
+        Just want an estimate?{' '}
+        <Link className="link" href="/calculate">
+          Calculate without an account
+        </Link>
+      </p>
+    </AuthLayout>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }
