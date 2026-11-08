@@ -1,0 +1,18 @@
+# Netlify deploys the Next.js frontend in /frontend. The .NET API is hosted separately.
+#
+# TaxNavi uses the Next.js App Router with server-rendered dynamic routes (e.g. /dashboard/reports/[id]),
+# so it runs on Netlify's Next.js runtime, which handles routing, page refreshes and 404s itself.
+# Do NOT add an SPA "/* /index.html 200" fallback: there is no index.html, and it would break dynamic routes.
+
+[build]
+  base = "frontend"          # where package.json lives
+  command = "npm run build"  # next build
+  publish = ".next"          # relative to base; the Next.js plugin takes it from here
+
+[build.environment]
+  NODE_VERSION = "20"
+  # NEXT_PUBLIC_API_URL must be set in the Netlify UI (Site configuration -> Environment variables)
+  # to the deployed API, e.g. https://api.your-domain.com/api. It is baked in at build time.
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
