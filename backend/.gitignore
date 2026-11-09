@@ -71,3 +71,5 @@ Thumbs.db
 
 # Migrations (auto-generated)
 *.Designer.cs
+# EF Core migration designers are required: they register each migration.
+!**/Migrations/*.Designer.cs
