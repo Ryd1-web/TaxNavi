@@ -105,11 +105,11 @@ builder.Services.AddRateLimiter(options =>
 
 // Database (PostgreSQL). Render and similar hosts provide DATABASE_URL as a postgres:// URI.
 NpgsqlSettings.Configure();
-var rawConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-if (string.IsNullOrWhiteSpace(rawConnectionString))
-{
-    rawConnectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ?? string.Empty;
-}
+// DATABASE_URL wins when set, so the local default in appsettings.json never shadows the host's database.
+var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+var rawConnectionString = !string.IsNullOrWhiteSpace(databaseUrl)
+    ? databaseUrl
+    : builder.Configuration.GetConnectionString("DefaultConnection") ?? string.Empty;
 var connectionString = NpgsqlSettings.NormalizeConnectionString(rawConnectionString);
 var useInMemoryDatabase = builder.Configuration.GetValue<bool>("UseInMemoryDatabase");
 var applyDatabaseSetupOnStartup = builder.Configuration.GetValue<bool>("DatabaseSetup:ApplyOnStartup");
