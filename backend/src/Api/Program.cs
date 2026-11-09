@@ -17,6 +17,23 @@ using TaxNavi.Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Hosts such as Render assign the listening port through PORT.
+var hostPort = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(hostPort))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{hostPort}");
+}
+
+// Behind a TLS-terminating proxy (Render), trust X-Forwarded-For/Proto so HTTPS redirection doesn't loop
+// and rate limits apply per real client IP instead of per proxy.
+builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor |
+                               Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear(); // Render's proxy addresses are not fixed
+    options.KnownProxies.Clear();
+});
+
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
@@ -86,8 +103,14 @@ builder.Services.AddRateLimiter(options =>
         _ => new FixedWindowRateLimiterOptions { PermitLimit = checkoutLimit, Window = TimeSpan.FromMinutes(1) }));
 });
 
-// Database
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+// Database (PostgreSQL). Render and similar hosts provide DATABASE_URL as a postgres:// URI.
+NpgsqlSettings.Configure();
+var rawConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrWhiteSpace(rawConnectionString))
+{
+    rawConnectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ?? string.Empty;
+}
+var connectionString = NpgsqlSettings.NormalizeConnectionString(rawConnectionString);
 var useInMemoryDatabase = builder.Configuration.GetValue<bool>("UseInMemoryDatabase");
 var applyDatabaseSetupOnStartup = builder.Configuration.GetValue<bool>("DatabaseSetup:ApplyOnStartup");
 builder.Services.AddDbContext<TaxNaviDbContext>(options =>
@@ -98,7 +121,7 @@ builder.Services.AddDbContext<TaxNaviDbContext>(options =>
         return;
     }
 
-    options.UseSqlServer(connectionString, b => b.MigrationsAssembly("TaxNavi.Infrastructure"));
+    options.UseNpgsql(connectionString, b => b.MigrationsAssembly("TaxNavi.Infrastructure"));
 });
 
 // Tax rules (versioned, per tax year)
@@ -190,6 +213,8 @@ if (builder.Configuration.GetValue("Webhooks:RetryEnabled", true))
 }
 
 var app = builder.Build();
+
+app.UseForwardedHeaders(); // must run before anything that reads the scheme or client IP
 
 using (var scope = app.Services.CreateScope())
 {

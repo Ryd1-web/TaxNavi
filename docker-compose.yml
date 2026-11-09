@@ -1,64 +1,65 @@
-version: '3.8'
+# TaxNavi: PostgreSQL + .NET API + Next.js frontend.
+# Usage: copy .env.example to .env, fill it in, then: docker compose up -d --build
+# Secrets come only from .env (git-ignored); compose refuses to start if a required one is missing.
 
 services:
-  # SQL Server Database
-  mssql:
-    image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: taxnavi-mssql
-    environment:
-      ACCEPT_EULA: "Y"
-      SA_PASSWORD: "TaxNavi@2024"
-      MSSQL_DATABASE: "TaxNavi"
+  db:
+    image: postgres:16-alpine
+    container_name: taxnavi-db
     ports:
-      - "1433:1433"
+      - "127.0.0.1:${DB_PORT:-5434}:5432"   # for pgAdmin/psql on this machine only
+    environment:
+      POSTGRES_DB: taxnavi
+      POSTGRES_USER: taxnavi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
-      - mssql_data:/var/opt/mssql
-    networks:
-      - taxnavi-network
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taxnavi -d taxnavi"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    networks: [taxnavi]
 
-  # Backend API
   api:
     build:
       context: ./backend
-      dockerfile: Dockerfile
     container_name: taxnavi-api
     ports:
-      - "5000:5000"
+      - "${API_PORT:-5000}:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: "Development"
-      ConnectionStrings__DefaultConnection: "Server=mssql,1433;Database=TaxNavi;User Id=sa;Password=TaxNavi@2024;TrustServerCertificate=true;"
-      Jwt__Secret: "your-super-secret-key-that-is-at-least-32-characters-long-change-in-production"
-      Jwt__Issuer: "TaxNavi.ai"
-      Jwt__Audience: "TaxNavi.Users"
-      AZURE_BLOB_STORAGE_CONNECTION_STRING: ${AZURE_BLOB_STORAGE_CONNECTION_STRING}
-      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}
-      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT}
-      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY}
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=taxnavi;Username=taxnavi;Password=${POSTGRES_PASSWORD}"
+      DatabaseSetup__ApplyOnStartup: "true"   # applies EF migrations on start; idempotent
+      Jwt__Secret: ${JWT_SECRET:?Set JWT_SECRET in .env (32+ random characters)}
+      App__FrontendUrl: ${FRONTEND_URL:-http://localhost:3000}
+      Cors__AllowedOrigins__0: ${FRONTEND_URL:-http://localhost:3000}
+      Paystack__SecretKey: ${PAYSTACK_SECRET_KEY:-}
+      Paystack__SmePlanCode: ${PAYSTACK_SME_PLAN_CODE:-}
+      Paystack__AllowLiveKeys: ${PAYSTACK_ALLOW_LIVE_KEYS:-false}
     depends_on:
-      - mssql
-    networks:
-      - taxnavi-network
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [taxnavi]
 
-  # Frontend
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: "http://localhost:5000/api"
+        # Baked into the browser bundle at build time: the URL browsers use to reach the API.
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:5000/api}
     container_name: taxnavi-frontend
     ports:
-      - "3000:3000"
-    environment:
-      NEXT_PUBLIC_API_URL: "http://localhost:5000/api"
+      - "${FRONTEND_PORT:-3000}:3000"
     depends_on:
       - api
-    networks:
-      - taxnavi-network
+    restart: unless-stopped
+    networks: [taxnavi]
 
 volumes:
-  mssql_data:
+  pg_data:
 
 networks:
-  taxnavi-network:
-    driver: bridge
+  taxnavi:

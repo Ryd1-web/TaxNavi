@@ -1,6 +1,6 @@
 namespace TaxNavi.Infrastructure.Repositories;
 
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Microsoft.EntityFrameworkCore;
 using TaxNavi.Domain.Entities;
 using TaxNavi.Domain.Interfaces;
@@ -28,7 +28,7 @@ public class PaymentWebhookEventRepository : IPaymentWebhookEventRepository
             await _context.SaveChangesAsync(cancellationToken);
             return true;
         }
-        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 })
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
             // Unique index on EventKey: a concurrent delivery of the same event won the insert.
             // Any other database error is a real failure and propagates.

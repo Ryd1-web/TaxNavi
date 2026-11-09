@@ -32,8 +32,11 @@ public class Payment
     /// <summary>Set exactly once, atomically, when the purchase is delivered. Guards against double fulfilment.</summary>
     public DateTime? FulfilledAt { get; set; }
 
-    /// <summary>Optimistic-concurrency token: a stale write (e.g. "abandoned" racing "success") fails instead of overwriting.</summary>
-    public byte[]? RowVersion { get; set; }
+    /// <summary>
+    /// Optimistic-concurrency token (PostgreSQL's xmin): a stale write — e.g. "abandoned" racing "success" — fails
+    /// instead of overwriting.
+    /// </summary>
+    public uint Version { get; set; }
 
     // Navigation properties
     public User? User { get; set; }

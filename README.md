@@ -30,7 +30,7 @@ A comprehensive web application for AI-powered tax advisory tailored for individ
 ### Backend
 - **Runtime**: .NET 8
 - **Architecture**: Clean Architecture (Domain → Application → Infrastructure → API)
-- **Database**: Azure SQL Server / SQL Server (LocalDB for development)
+- **Database**: PostgreSQL 16 (Render Postgres in production, Docker locally)
 - **ORM**: Entity Framework Core 8.0
 - **Authentication**: JWT with BCrypt password hashing
 - **AI**: Azure OpenAI SDK
@@ -47,14 +47,14 @@ A comprehensive web application for AI-powered tax advisory tailored for individ
 
 ### Deployment
 - **Container**: Docker & Docker Compose
-- **Database**: SQL Server 2022
+- **Database**: PostgreSQL 16
 
 ## 📋 Prerequisites
 
 ### Development
 - **.NET 8 SDK** [Download](https://dotnet.microsoft.com/download/dotnet/8.0)
 - **Node.js 20+** [Download](https://nodejs.org/)
-- **SQL Server 2022** or LocalDB
+- **PostgreSQL 16** (or `docker compose up -d db`)
 - **Docker** (optional, for containerized deployment)
 - **Azure Account** (optional, for cloud services)
 
@@ -82,7 +82,7 @@ Edit `src/Api/appsettings.json`:
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Data Source=(localdb)\\mssqllocaldb;Initial Catalog=TaxNavi;Integrated Security=true;"
+    "DefaultConnection": "Host=localhost;Port=5432;Database=taxnavi;Username=taxnavi;Password=taxnavi_dev"
   }
 }
 ```

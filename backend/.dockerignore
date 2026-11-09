@@ -1,0 +1,10 @@
+**/bin/
+**/obj/
+**/*.user
+**/.vs/
+**/Uploads/
+**/TestResults/
+src/Application.Tests/
+src/Api.Tests/
+*.log
+.env

@@ -243,7 +243,7 @@ public class TaxCalculationServiceTests
 
 ### Issue: Migration fails
 ```
-Solution: Ensure correct connection string and SQL Server is running
+Solution: Ensure correct connection string and PostgreSQL is running
 ```
 
 ### Issue: Azure OpenAI returns NULL

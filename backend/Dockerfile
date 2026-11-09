@@ -17,10 +17,14 @@ FROM build AS publish
 RUN dotnet publish "TaxNavi.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
+# The base image has no fonts; without them QuestPDF renders PDFs with no text.
+# DejaVu covers the Naira sign (U+20A6).
+RUN apt-get update     && apt-get install -y --no-install-recommends fontconfig fonts-dejavu-core fonts-liberation     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=publish /app/publish .
 
-ENV ASPNETCORE_URLS=http://+:5000
-EXPOSE 5000
+# Render sets PORT (the app binds to it); 8080 is the fallback for other hosts.
+ENV ASPNETCORE_URLS=http://+:8080     ASPNETCORE_ENVIRONMENT=Production
+EXPOSE 8080
 
 ENTRYPOINT ["dotnet", "TaxNavi.Api.dll"]

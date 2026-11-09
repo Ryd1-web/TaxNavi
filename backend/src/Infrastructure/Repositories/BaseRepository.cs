@@ -1,6 +1,6 @@
 namespace TaxNavi.Infrastructure.Repositories;
 
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Microsoft.EntityFrameworkCore;
 using TaxNavi.Domain.Exceptions;
 using TaxNavi.Domain.Interfaces;
@@ -58,7 +58,7 @@ public class BaseRepository<T> : IRepository<T> where T : class
             // Surface as a domain exception so services can react without depending on EF Core.
             throw new ConcurrencyConflictException(typeof(T).Name, ex);
         }
-        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 })
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
             throw new DuplicateRecordException(typeof(T).Name, ex);
         }

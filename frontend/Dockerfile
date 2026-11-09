@@ -16,6 +16,8 @@ COPY . .
 ARG NEXT_PUBLIC_API_URL=http://localhost:5000/api
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
+# Standalone output = small self-contained server (only for the Docker image; Netlify builds are unaffected).
+ENV NEXT_OUTPUT=standalone
 RUN npm run build
 
 # Production image
@@ -23,18 +25,17 @@ FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV NEXT_PUBLIC_API_URL=http://localhost:5000/api
 
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nextjs -u 1001
 
-COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
 
 EXPOSE 3000
-ENV PORT 3000
+ENV PORT=3000 \
+    HOSTNAME=0.0.0.0
 
 CMD ["node", "server.js"]

@@ -5,6 +5,11 @@ using TaxNavi.Domain.Entities;
 
 public class TaxNaviDbContext : DbContext
 {
+    static TaxNaviDbContext()
+    {
+        NpgsqlSettings.Configure();
+    }
+
     public TaxNaviDbContext(DbContextOptions<TaxNaviDbContext> options) : base(options)
     {
     }
@@ -27,7 +32,7 @@ public class TaxNaviDbContext : DbContext
             entity.Property(u => u.Email).IsRequired();
             entity.Property(u => u.PasswordHash).IsRequired();
             entity.HasIndex(u => u.Email).IsUnique();
-            entity.Property(u => u.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(u => u.CreatedAt).HasDefaultValueSql("(now() at time zone 'utc')");
         });
 
         // TaxProfile configuration
@@ -35,7 +40,7 @@ public class TaxNaviDbContext : DbContext
         {
             entity.HasKey(tp => tp.Id);
             entity.Property(tp => tp.JsonData).HasDefaultValue("{}");
-            entity.Property(tp => tp.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(tp => tp.CreatedAt).HasDefaultValueSql("(now() at time zone 'utc')");
             entity.HasOne(tp => tp.User)
                 .WithMany(u => u.TaxProfiles)
                 .HasForeignKey(tp => tp.UserId)
@@ -51,7 +56,7 @@ public class TaxNaviDbContext : DbContext
             entity.Property(tr => tr.TotalIncome).HasPrecision(18, 2);
             entity.Property(tr => tr.AllowableDeductions).HasPrecision(18, 2);
             entity.Property(tr => tr.ProjectedSavings).HasPrecision(18, 2);
-            entity.Property(tr => tr.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(tr => tr.CreatedAt).HasDefaultValueSql("(now() at time zone 'utc')");
             entity.Property(tr => tr.RuleSetId).HasMaxLength(64);
             entity.Property(tr => tr.GuestEmail).HasMaxLength(254);
             entity.Property(tr => tr.AccessTokenHash).HasMaxLength(64);
@@ -81,13 +86,13 @@ public class TaxNaviDbContext : DbContext
             entity.Property(p => p.AuthorizationUrl).HasMaxLength(512);
             entity.Property(p => p.Channel).HasMaxLength(32);
             entity.Property(p => p.FailureReason).HasMaxLength(200);
-            entity.Property(p => p.RowVersion).IsRowVersion();
+            entity.Property(p => p.Version).IsRowVersion(); // maps to PostgreSQL's xmin system column
             entity.HasIndex(p => p.TaxReportId);
             // At most one open (unpaid) checkout per report: blocks duplicate transactions from racing requests.
             entity.HasIndex(p => p.TaxReportId, "IX_Payments_TaxReportId_Pending")
                 .IsUnique()
-                .HasFilter("[Status] = 'Pending' AND [TaxReportId] IS NOT NULL");
-            entity.Property(p => p.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+                .HasFilter("\"Status\" = 'Pending' AND \"TaxReportId\" IS NOT NULL");
+            entity.Property(p => p.CreatedAt).HasDefaultValueSql("(now() at time zone 'utc')");
             entity.HasOne(p => p.User)
                 .WithMany(u => u.Payments)
                 .HasForeignKey(p => p.UserId)
@@ -118,7 +123,7 @@ public class TaxNaviDbContext : DbContext
             entity.Property(s => s.ProviderSubscriptionCode).HasMaxLength(64);
             entity.Property(s => s.ProviderEmailToken).HasMaxLength(64);
             entity.Property(s => s.ProviderCustomerCode).HasMaxLength(64);
-            entity.HasIndex(s => s.ProviderSubscriptionCode).IsUnique().HasFilter("[ProviderSubscriptionCode] IS NOT NULL");
+            entity.HasIndex(s => s.ProviderSubscriptionCode).IsUnique().HasFilter("\"ProviderSubscriptionCode\" IS NOT NULL");
             entity.HasOne(s => s.User)
                 .WithMany(u => u.Subscriptions)
                 .HasForeignKey(s => s.UserId)

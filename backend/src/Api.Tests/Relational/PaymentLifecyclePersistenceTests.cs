@@ -10,13 +10,13 @@ namespace TaxNavi.Api.Tests.Relational;
 /// Every lifecycle stage is asserted by re-reading the database through a fresh DbContext,
 /// proving the rows were actually written — not just changed in memory.
 /// </summary>
-public class PaymentLifecyclePersistenceTests : IClassFixture<SqlServerFixture>
+public class PaymentLifecyclePersistenceTests : IClassFixture<PostgresFixture>
 {
-    private readonly SqlServerFixture _db;
+    private readonly PostgresFixture _db;
 
-    public PaymentLifecyclePersistenceTests(SqlServerFixture db) => _db = db;
+    public PaymentLifecyclePersistenceTests(PostgresFixture db) => _db = db;
 
-    [SqlServerFact]
+    [PostgresFact]
     public async Task ReportPurchase_PersistsEveryStage_AndFulfilsOnce()
     {
         var gateway = new SqlTestGateway();
@@ -81,7 +81,7 @@ public class PaymentLifecyclePersistenceTests : IClassFixture<SqlServerFixture>
     [InlineData("abandoned", PaymentStatuses.Cancelled)]
     public async Task FailedOrAbandonedPayment_IsRecorded_WithoutGrantingAccess(string providerStatus, string expected)
     {
-        if (!SqlServerAvailable.IsAvailable) return;
+        if (!PostgresAvailable.IsAvailable) return;
 
         var gateway = new SqlTestGateway();
         string reference;
@@ -103,7 +103,7 @@ public class PaymentLifecyclePersistenceTests : IClassFixture<SqlServerFixture>
         Assert.False((await check.TaxReports.SingleAsync(r => r.Id == payment.TaxReportId)).IsUnlocked);
     }
 
-    [SqlServerFact]
+    [PostgresFact]
     public async Task Webhook_IsPersistedOnReceipt_ThenMarkedProcessed_AndDuplicatesIgnored()
     {
         var gateway = new SqlTestGateway();
@@ -134,7 +134,7 @@ public class PaymentLifecyclePersistenceTests : IClassFixture<SqlServerFixture>
         Assert.Equal(PaymentStatuses.Completed, (await check.Payments.SingleAsync(p => p.Reference == reference)).Status);
     }
 
-    [SqlServerFact]
+    [PostgresFact]
     public async Task WebhookProcessingFailure_IsRecorded_ThenRecoveredByRetry()
     {
         var gateway = new SqlTestGateway();
@@ -174,7 +174,7 @@ public class PaymentLifecyclePersistenceTests : IClassFixture<SqlServerFixture>
         Assert.Equal(PaymentStatuses.Completed, (await final.Payments.SingleAsync(p => p.Reference == reference)).Status);
     }
 
-    [SqlServerFact]
+    [PostgresFact]
     public async Task Subscription_Lifecycle_IsPersistedEndToEnd()
     {
         const string plan = "PLN_sme_monthly";
@@ -279,7 +279,7 @@ public class PaymentLifecyclePersistenceTests : IClassFixture<SqlServerFixture>
         }
     }
 
-    [SqlServerFact]
+    [PostgresFact]
     public async Task DeletingAReport_KeepsPaymentHistory_AndRemovesItsProfile()
     {
         var gateway = new SqlTestGateway();

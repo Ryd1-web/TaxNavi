@@ -9,11 +9,11 @@ using Xunit;
 namespace TaxNavi.Api.Tests.Relational;
 
 /// <summary>Constraints, concurrency and transaction behaviour against a real SQL Server database.</summary>
-public class PersistenceIntegrityTests : IClassFixture<SqlServerFixture>
+public class PersistenceIntegrityTests : IClassFixture<PostgresFixture>
 {
-    private readonly SqlServerFixture _db;
+    private readonly PostgresFixture _db;
 
-    public PersistenceIntegrityTests(SqlServerFixture db) => _db = db;
+    public PersistenceIntegrityTests(PostgresFixture db) => _db = db;
 
     private static Payment NewPayment(Guid? reportId = null, string status = PaymentStatuses.Pending) => new()
     {
@@ -36,7 +36,7 @@ public class PersistenceIntegrityTests : IClassFixture<SqlServerFixture>
         return created.Entity;
     }
 
-    [SqlServerFact]
+    [PostgresFact]
     public async Task ForeignKey_PaymentForMissingReport_IsRejected()
     {
         await using var db = _db.NewContext();
@@ -44,7 +44,7 @@ public class PersistenceIntegrityTests : IClassFixture<SqlServerFixture>
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
     }
 
-    [SqlServerFact]
+    [PostgresFact]
     public async Task UniqueReference_IsEnforced_AsDuplicateRecord()
     {
         var first = NewPayment();
@@ -57,7 +57,7 @@ public class PersistenceIntegrityTests : IClassFixture<SqlServerFixture>
         await Assert.ThrowsAsync<DuplicateRecordException>(() => repo.AddAsync(second));
     }
 
-    [SqlServerFact]
+    [PostgresFact]
     public async Task OnlyOneOpenCheckoutPerReport_IsEnforced()
     {
         var report = await NewReportAsync();
@@ -73,7 +73,7 @@ public class PersistenceIntegrityTests : IClassFixture<SqlServerFixture>
         await Assert.ThrowsAsync<DuplicateRecordException>(() => new PaymentRepository(db2).AddAsync(NewPayment(report.Id)));
     }
 
-    [SqlServerFact]
+    [PostgresFact]
     public async Task TryMarkFulfilled_UnderConcurrency_HasExactlyOneWinner()
     {
         var payment = NewPayment(status: PaymentStatuses.Completed);
@@ -92,7 +92,7 @@ public class PersistenceIntegrityTests : IClassFixture<SqlServerFixture>
         Assert.Equal(1, results.Count(won => won));
     }
 
-    [SqlServerFact]
+    [PostgresFact]
     public async Task StaleWrite_CannotOverwriteACompletedPayment()
     {
         var payment = NewPayment();
@@ -119,7 +119,7 @@ public class PersistenceIntegrityTests : IClassFixture<SqlServerFixture>
         Assert.NotNull(stored.FulfilledAt);
     }
 
-    [SqlServerFact]
+    [PostgresFact]
     public async Task UnitOfWork_RollsBackAllWrites_WhenAnyStepFails()
     {
         var profileId = Guid.NewGuid();
@@ -138,7 +138,7 @@ public class PersistenceIntegrityTests : IClassFixture<SqlServerFixture>
         Assert.False(await check.TaxProfiles.AnyAsync(p => p.Id == profileId));
     }
 
-    [SqlServerFact]
+    [PostgresFact]
     public async Task FulfilmentFailure_RollsBackThePaymentStatusChange()
     {
         var gateway = new SqlTestGateway();

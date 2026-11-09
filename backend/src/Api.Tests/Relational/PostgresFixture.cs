@@ -1,7 +1,8 @@
-using Microsoft.Data.SqlClient;
+using System.Net.Sockets;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
 using TaxNavi.Application.DTOs;
 using TaxNavi.Application.Services;
 using TaxNavi.Infrastructure.Data;
@@ -11,44 +12,48 @@ using Xunit;
 namespace TaxNavi.Api.Tests.Relational;
 
 /// <summary>
-/// A throwaway SQL Server database (LocalDB by default) built from the real EF migrations, dropped afterwards.
-/// Override the server with TAXNAVI_TEST_SQLSERVER (a connection string without a database name).
+/// A throwaway PostgreSQL database built from the real EF migrations, dropped afterwards.
+/// Defaults to the local Docker container on port 5433; override with TAXNAVI_TEST_POSTGRES
+/// (a connection string without a database name).
 /// </summary>
-public sealed class SqlServerFixture : IAsyncLifetime
+public sealed class PostgresFixture : IAsyncLifetime
 {
-    public const string DefaultServer = @"Server=(localdb)\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=true;";
+    public const string DefaultServer = "Host=localhost;Port=5433;Username=taxnavi;Password=taxnavi_dev";
+
+    public static string Server => Environment.GetEnvironmentVariable("TAXNAVI_TEST_POSTGRES") ?? DefaultServer;
 
     public string ConnectionString { get; }
 
-    public SqlServerFixture()
+    public PostgresFixture()
     {
-        var server = Environment.GetEnvironmentVariable("TAXNAVI_TEST_SQLSERVER") ?? DefaultServer;
-        var builder = new SqlConnectionStringBuilder(server) { InitialCatalog = $"TaxNavi_Test_{Guid.NewGuid():N}", ConnectTimeout = 60 };
+        NpgsqlSettings.Configure();
+        var builder = new NpgsqlConnectionStringBuilder(Server) { Database = $"taxnavi_test_{Guid.NewGuid():N}", Timeout = 30 };
         ConnectionString = builder.ConnectionString;
     }
 
     public TaxNaviDbContext NewContext() => new(new DbContextOptionsBuilder<TaxNaviDbContext>()
-        .UseSqlServer(ConnectionString, b => b.MigrationsAssembly("TaxNavi.Infrastructure"))
+        .UseNpgsql(ConnectionString, b => b.MigrationsAssembly("TaxNavi.Infrastructure"))
         .Options);
 
     public async Task InitializeAsync()
     {
-        if (!SqlServerAvailable.IsAvailable)
+        if (!PostgresAvailable.IsAvailable)
         {
             return;
         }
 
         await using var db = NewContext();
-        await db.Database.MigrateAsync(); // applies the real migration chain, including data-fix steps
+        await db.Database.MigrateAsync(); // applies the real migration chain
     }
 
     public async Task DisposeAsync()
     {
-        if (!SqlServerAvailable.IsAvailable)
+        if (!PostgresAvailable.IsAvailable)
         {
             return;
         }
 
+        NpgsqlConnection.ClearAllPools(); // release pooled connections so the database can be dropped
         await using var db = NewContext();
         await db.Database.EnsureDeletedAsync();
     }
@@ -102,30 +107,30 @@ internal static class Rules
     public static ITaxRuleProvider Provider => Lazy.Value;
 }
 
-/// <summary>Skips relational tests (with a reason) when no SQL Server instance is reachable.</summary>
-public sealed class SqlServerFactAttribute : FactAttribute
+/// <summary>Skips relational tests (with a reason) when no PostgreSQL server is reachable.</summary>
+public sealed class PostgresFactAttribute : FactAttribute
 {
-    public SqlServerFactAttribute()
+    public PostgresFactAttribute()
     {
-        if (!SqlServerAvailable.IsAvailable)
+        if (!PostgresAvailable.IsAvailable)
         {
-            Skip = "SQL Server (LocalDB) not available. Set TAXNAVI_TEST_SQLSERVER to run relational tests.";
+            Skip = "PostgreSQL not available. Start one (docker run -d -p 5433:5432 -e POSTGRES_USER=taxnavi -e POSTGRES_PASSWORD=taxnavi_dev postgres:16-alpine) or set TAXNAVI_TEST_POSTGRES.";
         }
     }
 }
 
-internal static class SqlServerAvailable
+internal static class PostgresAvailable
 {
     private static readonly Lazy<bool> Probe = new(() =>
     {
         try
         {
-            var server = Environment.GetEnvironmentVariable("TAXNAVI_TEST_SQLSERVER") ?? SqlServerFixture.DefaultServer;
-            using var connection = new SqlConnection(new SqlConnectionStringBuilder(server) { InitialCatalog = "master", ConnectTimeout = 60 }.ConnectionString);
+            NpgsqlSettings.Configure();
+            using var connection = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(PostgresFixture.Server) { Database = "postgres", Timeout = 10 }.ConnectionString);
             connection.Open();
             return true;
         }
-        catch (SqlException)
+        catch (Exception ex) when (ex is NpgsqlException or SocketException or TimeoutException)
         {
             return false;
         }

@@ -57,11 +57,11 @@ public class PaymentRepository : BaseRepository<Payment>, IPaymentRepository
                     // The UPDATE also bumped the row version: refresh it so later saves of this instance don't
                     // report a false concurrency conflict.
                     var entry = _context.Entry(tracked);
-                    var version = await _context.Payments.Where(p => p.Id == paymentId).Select(p => p.RowVersion).SingleAsync(cancellationToken);
+                    var version = await _context.Payments.Where(p => p.Id == paymentId).Select(p => p.Version).SingleAsync(cancellationToken);
                     tracked.FulfilledAt = fulfilledAt;
                     entry.Property(p => p.FulfilledAt).OriginalValue = fulfilledAt;
-                    entry.Property(p => p.RowVersion).CurrentValue = version;
-                    entry.Property(p => p.RowVersion).OriginalValue = version;
+                    entry.Property(p => p.Version).CurrentValue = version;
+                    entry.Property(p => p.Version).OriginalValue = version;
                     entry.Property(p => p.FulfilledAt).IsModified = false;
                 }
             }
