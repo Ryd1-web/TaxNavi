@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useId, useState } from 'react';
 import { formatMoneyInput, parseMoneyInput } from '@/lib/formatters';
-import { Check } from './Icons';
+import { Check, Eye, EyeOff } from './Icons';
 
 interface FieldProps {
   label: string;
@@ -118,6 +118,41 @@ export function TextInput({ label, hint, error, optional, className, ...props }:
     <Field label={label} hint={hint} error={error} optional={optional}>
       {({ id, describedBy, invalid }) => (
         <input id={id} className={`input ${className ?? ''}`} aria-invalid={invalid || undefined} aria-describedby={describedBy} {...props} />
+      )}
+    </Field>
+  );
+}
+
+/** Password field with an eye button that toggles visibility. */
+export function PasswordInput({ label, hint, error, optional, className, ...props }: Omit<TextInputProps, 'type'>) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <Field label={label} hint={hint} error={error} optional={optional}>
+      {({ id, describedBy, invalid }) => (
+        <div className="relative">
+          <input
+            id={id}
+            type={visible ? 'text' : 'password'}
+            className={`input pr-12 ${className ?? ''}`}
+            aria-invalid={invalid || undefined}
+            aria-describedby={describedBy}
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            {...props}
+          />
+          <button
+            type="button"
+            onClick={() => setVisible((v) => !v)}
+            aria-label={visible ? 'Hide password' : 'Show password'}
+            aria-pressed={visible}
+            aria-controls={id}
+            title={visible ? 'Hide password' : 'Show password'}
+            className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl text-ink-subtle transition-colors hover:text-ink focus-visible:text-ink"
+          >
+            {visible ? <EyeOff size={19} /> : <Eye size={19} />}
+          </button>
+        </div>
       )}
     </Field>
   );

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useEffect, useState } from 'react';
 import AuthLayout, { safeNext } from '@/components/layout/AuthLayout';
 import { Button } from '@/components/ui/Button';
-import { ChoiceCard, TextInput } from '@/components/ui/Form';
+import { ChoiceCard, PasswordInput, TextInput } from '@/components/ui/Form';
 import { Building, Check, UserIcon } from '@/components/ui/Icons';
 import { Alert } from '@/components/ui/Primitives';
 import { useAuth } from '@/context/AuthContext';
@@ -89,7 +89,7 @@ function RegisterForm() {
         </div>
         <TextInput label="Email" type="email" autoComplete="email" inputMode="email" value={form.email} onChange={update('email')} error={errors.email} />
         <div>
-          <TextInput label="Password" type="password" autoComplete="new-password" value={form.password} onChange={update('password')} error={errors.password} maxLength={128} />
+          <PasswordInput label="Password" autoComplete="new-password" value={form.password} onChange={update('password')} error={errors.password} maxLength={128} />
           <ul className="mt-2.5 grid grid-cols-2 gap-1.5" aria-label="Password requirements">
             {passwordRules.map((rule) => {
               const ok = rule.test(form.password);

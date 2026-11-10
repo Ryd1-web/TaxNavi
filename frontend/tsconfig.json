@@ -35,7 +35,8 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next-verify/types/**/*.ts",
-    ".next-themecheck/types/**/*.ts"
+    ".next-themecheck/types/**/*.ts",
+    ".next-pwcheck/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useEffect, useState } from 'react';
 import AuthLayout, { safeNext } from '@/components/layout/AuthLayout';
 import { Button } from '@/components/ui/Button';
-import { TextInput } from '@/components/ui/Form';
+import { PasswordInput, TextInput } from '@/components/ui/Form';
 import { Alert } from '@/components/ui/Primitives';
 import { useAuth } from '@/context/AuthContext';
 import { ApiError } from '@/services/apiService';
@@ -17,7 +17,6 @@ function LoginForm() {
   const { login, isAuthenticated, isLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; form?: string }>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -58,19 +57,13 @@ function LoginForm() {
       <form onSubmit={onSubmit} noValidate className="space-y-5">
         {errors.form && <Alert tone="error">{errors.form}</Alert>}
         <TextInput label="Email" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} />
-        <div>
-          <TextInput
-            label="Password"
-            type={showPassword ? 'text' : 'password'}
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            error={errors.password}
-          />
-          <button type="button" className="mt-2 text-[13px] font-medium text-ink-subtle hover:text-ink" onClick={() => setShowPassword((v) => !v)} aria-pressed={showPassword}>
-            {showPassword ? 'Hide password' : 'Show password'}
-          </button>
-        </div>
+        <PasswordInput
+          label="Password"
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          error={errors.password}
+        />
         <Button type="submit" block size="lg" loading={submitting} loadingText="Signing in…">
           Sign in
         </Button>
