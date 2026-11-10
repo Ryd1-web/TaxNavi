@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
@@ -53,11 +53,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [preference, setPreferenceState] = useState<ThemePreference>('system');
   const [resolved, setResolved] = useState<ResolvedTheme>('light');
 
-  // Hydrate from storage (the init script has already painted the right theme).
-  useEffect(() => {
+  // Hydrate from storage and re-apply it: the init script paints the right theme first, but React's
+  // hydration of <html> can drop the class it added, so the saved choice must be enforced here too.
+  useLayoutEffect(() => {
     const stored = readPreference();
+    const theme = resolve(stored);
     setPreferenceState(stored);
-    setResolved(resolve(stored));
+    setResolved(theme);
+    const root = document.documentElement;
+    root.classList.toggle('dark', theme === 'dark');
+    root.style.colorScheme = theme;
   }, []);
 
   // Follow the operating system while the preference is "system".
