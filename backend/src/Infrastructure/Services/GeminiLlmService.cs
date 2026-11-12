@@ -45,9 +45,20 @@ public sealed class GeminiLlmService : ILlmService
             return new LlmResponse { Success = false, Error = "quota", Model = ModelName };
         }
 
-        object generationConfig = _options.ThinkingBudget is { } budget
-            ? new { temperature = request.Temperature, maxOutputTokens = request.MaxOutputTokens, thinkingConfig = new { thinkingBudget = budget } }
-            : new { temperature = request.Temperature, maxOutputTokens = request.MaxOutputTokens };
+        var generationConfig = new Dictionary<string, object>
+        {
+            ["temperature"] = request.Temperature,
+            ["maxOutputTokens"] = request.MaxOutputTokens
+        };
+        // Gemini 3.x takes thinkingLevel; 2.5 took thinkingBudget. Only the configured one is sent.
+        if (!string.IsNullOrWhiteSpace(_options.ThinkingLevel))
+        {
+            generationConfig["thinkingConfig"] = new { thinkingLevel = _options.ThinkingLevel };
+        }
+        else if (_options.ThinkingBudget is { } budget)
+        {
+            generationConfig["thinkingConfig"] = new { thinkingBudget = budget };
+        }
 
         var body = new
         {
@@ -58,24 +69,44 @@ public sealed class GeminiLlmService : ILlmService
             generationConfig
         };
 
-        using var response = await GeminiRetry.SendAsync(
-            () => _http.PostAsJsonAsync($"models/{Uri.EscapeDataString(_options.ChatModel)}:generateContent", body, cancellationToken),
-            _options.MaxRetries,
-            TimeSpan.FromSeconds(_options.MaxChatRetryWaitSeconds),
-            TimeSpan.FromMinutes(_options.QuotaCooldownMinutes),
-            _logger,
-            cancellationToken);
-        if (!response.IsSuccessStatusCode)
+        // Primary model, then fallbacks: a retired (404) or overloaded (503) model moves on to the
+        // next one instead of dropping the user to the rules assistant.
+        var models = new[] { _options.ChatModel }.Concat(_options.FallbackChatModels)
+            .Where(m => !string.IsNullOrWhiteSpace(m)).Distinct().ToList();
+        HttpResponseMessage? response = null;
+        var model = models[0];
+        foreach (var candidate in models)
+        {
+            response?.Dispose();
+            model = candidate;
+            response = await GeminiRetry.SendAsync(
+                () => _http.PostAsJsonAsync($"models/{Uri.EscapeDataString(candidate)}:generateContent", body, cancellationToken),
+                _options.MaxRetries,
+                TimeSpan.FromSeconds(_options.MaxChatRetryWaitSeconds),
+                TimeSpan.FromMinutes(_options.QuotaCooldownMinutes),
+                _logger,
+                cancellationToken);
+            if (response.StatusCode is not (HttpStatusCode.NotFound or HttpStatusCode.ServiceUnavailable))
+            {
+                break;
+            }
+
+            _logger.LogWarning("Gemini model {Model} unavailable ({Status}); trying next model", candidate, (int)response.StatusCode);
+        }
+
+        using var responseScope = response;
+        if (!response!.IsSuccessStatusCode)
         {
             var category = response.StatusCode switch
             {
                 HttpStatusCode.TooManyRequests => "quota",
                 HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => "auth",
                 HttpStatusCode.NotFound => "model",
+                HttpStatusCode.BadRequest => "request",
                 _ => "provider"
             };
-            _logger.LogError("Gemini generateContent failed: {Status} ({Category})", (int)response.StatusCode, category);
-            return new LlmResponse { Success = false, Error = category, Model = ModelName };
+            _logger.LogError("Gemini generateContent failed on {Model}: {Status} ({Category})", model, (int)response.StatusCode, category);
+            return new LlmResponse { Success = false, Error = category, Model = model };
         }
 
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
@@ -85,7 +116,7 @@ public sealed class GeminiLlmService : ILlmService
             feedback.TryGetProperty("blockReason", out var block))
         {
             _logger.LogWarning("Gemini blocked a prompt: {Reason}", block.GetString());
-            return new LlmResponse { Success = false, Error = "blocked", Model = ModelName };
+            return new LlmResponse { Success = false, Error = "blocked", Model = model };
         }
 
         string text = string.Empty;
@@ -112,14 +143,14 @@ public sealed class GeminiLlmService : ILlmService
         if (string.IsNullOrWhiteSpace(text))
         {
             _logger.LogWarning("Gemini returned no text (finishReason: {Reason})", finishReason);
-            return new LlmResponse { Success = false, Error = "empty", Model = ModelName, FinishReason = finishReason };
+            return new LlmResponse { Success = false, Error = "empty", Model = model, FinishReason = finishReason };
         }
 
         return new LlmResponse
         {
             Success = true,
             Text = text,
-            Model = ModelName,
+            Model = model,
             InputTokens = promptTokens,
             // Output cost covers everything generated (thinking included), not just visible text.
             OutputTokens = Math.Max(0, totalTokens - promptTokens),

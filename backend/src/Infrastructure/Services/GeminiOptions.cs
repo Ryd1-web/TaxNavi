@@ -10,7 +10,10 @@ public class GeminiOptions
     public string BaseUrl { get; set; } = "https://generativelanguage.googleapis.com/v1beta";
 
     /// <summary>Chat model for assistant answers and report explanations.</summary>
-    public string ChatModel { get; set; } = "gemini-2.5-flash";
+    public string ChatModel { get; set; } = "gemini-3.5-flash-lite";
+
+    /// <summary>Tried in order when the chat model is retired (404) or overloaded (503).</summary>
+    public List<string> FallbackChatModels { get; set; } = new();
 
     /// <summary>Embedding model for retrieval.</summary>
     public string EmbeddingModel { get; set; } = "gemini-embedding-001";
@@ -19,7 +22,10 @@ public class GeminiOptions
     /// Thinking-token budget for chat calls. 0 disables thinking on models that allow it
     /// (cheapest); null omits the field for models that configure thinking differently.
     /// </summary>
-    public int? ThinkingBudget { get; set; } = 0;
+    public int? ThinkingBudget { get; set; }
+
+    /// <summary>Gemini 3.x thinking control ("minimal", "low", "medium", "high"); takes precedence over ThinkingBudget.</summary>
+    public string? ThinkingLevel { get; set; } = "low";
 
     public int MaxOutputTokens { get; set; } = 1200;
     public double Temperature { get; set; } = 0.2;
