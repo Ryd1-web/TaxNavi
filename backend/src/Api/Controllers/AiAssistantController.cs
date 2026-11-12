@@ -30,6 +30,28 @@ public class AiAssistantController : ApiControllerBase
         _engine = engine;
     }
 
+    /// <summary>
+    /// Public, secret-free health of the AI pipeline: is a provider configured, is the knowledge
+    /// base indexed, is the quota cooldown active. Used to diagnose "answers come from rules only".
+    /// </summary>
+    [HttpGet("status")]
+    public async Task<IActionResult> Status(
+        [FromServices] TaxNavi.Domain.Interfaces.ILlmService llm,
+        [FromServices] TaxNavi.Domain.Interfaces.IEmbeddingService embeddings,
+        [FromServices] TaxNavi.Domain.Interfaces.IKnowledgeDocumentRepository documents)
+    {
+        var all = await documents.ListAsync(HttpContext.RequestAborted);
+        return Success(new
+        {
+            llmConfigured = llm.IsConfigured,
+            chatModel = llm.ModelName,
+            embeddingsConfigured = embeddings.IsConfigured,
+            embeddingModel = embeddings.ModelName,
+            quotaCooldown = TaxNavi.Infrastructure.Services.GeminiRetry.InCooldown,
+            documents = all.Select(d => new { d.Title, d.Version, d.Status, d.ChunkCount, error = d.LastError == null ? null : d.LastError.Length > 160 ? d.LastError[..160] : d.LastError })
+        });
+    }
+
     /// <summary>Ask the tax assistant a question (creates or continues a conversation).</summary>
     [HttpPost("chat")]
     public async Task<IActionResult> Chat([FromBody] AiChatRequestDto request)
