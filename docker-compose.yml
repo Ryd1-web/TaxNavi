@@ -4,7 +4,7 @@
 
 services:
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16  # postgres 16 + pgvector (vector search for the AI assistant)
     container_name: taxnavi-db
     ports:
       - "127.0.0.1:${DB_PORT:-5434}:5432"   # for pgAdmin/psql on this machine only
@@ -38,6 +38,8 @@ services:
       Paystack__SecretKey: ${PAYSTACK_SECRET_KEY:-}
       Paystack__SmePlanCode: ${PAYSTACK_SME_PLAN_CODE:-}
       Paystack__AllowLiveKeys: ${PAYSTACK_ALLOW_LIVE_KEYS:-false}
+      Gemini__ApiKey: ${GEMINI_API_KEY:-}                 # AI assistant (Google AI Studio key); blank = rules-only assistant
+      App__Admin__Emails__0: ${ADMIN_EMAIL:-}            # may upload/index knowledge-base documents
     depends_on:
       db:
         condition: service_healthy

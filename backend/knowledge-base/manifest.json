@@ -1,0 +1,45 @@
+{
+  "$comment": "Knowledge-base seed manifest. Each entry is ingested on startup when KnowledgeBase:SeedOnStartup is true; files already indexed (same SHA-256) are skipped. Files are the Federal Republic of Nigeria Official Gazette copies downloaded from the National Assembly (nass.gov.ng) on 2026-11-11.",
+  "documents": [
+    {
+      "file": "sources/nigeria-tax-act-2025-gazette.pdf",
+      "title": "Nigeria Tax Act 2025",
+      "documentType": "Legislation",
+      "sourceName": "National Assembly of Nigeria (Official Gazette No. 117, Vol. 112, Act No. 7)",
+      "sourceUrl": "https://nass.gov.ng/documents/download/11249",
+      "publicationDate": "2025-06-26",
+      "effectiveDate": "2026-01-01",
+      "taxYear": 2026
+    },
+    {
+      "file": "sources/nigeria-tax-administration-act-2025-gazette.pdf",
+      "title": "Nigeria Tax Administration Act 2025",
+      "documentType": "Legislation",
+      "sourceName": "National Assembly of Nigeria (Official Gazette, Act No. 5)",
+      "sourceUrl": "https://nass.gov.ng/documents/download/11250",
+      "publicationDate": "2025-06-26",
+      "effectiveDate": "2026-01-01",
+      "taxYear": 2026
+    },
+    {
+      "file": "sources/nigeria-revenue-service-establishment-act-2025-gazette.pdf",
+      "title": "Nigeria Revenue Service (Establishment) Act 2025",
+      "documentType": "Legislation",
+      "sourceName": "National Assembly of Nigeria (Official Gazette, Act No. 4)",
+      "sourceUrl": "https://nass.gov.ng/documents/download/11251",
+      "publicationDate": "2025-06-26",
+      "effectiveDate": "2026-01-01",
+      "taxYear": 2026
+    },
+    {
+      "file": "sources/joint-revenue-board-establishment-act-2025-gazette.pdf",
+      "title": "Joint Revenue Board of Nigeria (Establishment) Act 2025",
+      "documentType": "Legislation",
+      "sourceName": "National Assembly of Nigeria (Official Gazette, Act No. 6)",
+      "sourceUrl": "https://nass.gov.ng/documents/download/11247",
+      "publicationDate": "2025-06-26",
+      "effectiveDate": "2026-01-01",
+      "taxYear": 2026
+    }
+  ]
+}

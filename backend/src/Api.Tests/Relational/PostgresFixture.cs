@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using Pgvector.EntityFrameworkCore;
 using TaxNavi.Application.DTOs;
 using TaxNavi.Application.Services;
 using TaxNavi.Infrastructure.Data;
@@ -32,7 +33,7 @@ public sealed class PostgresFixture : IAsyncLifetime
     }
 
     public TaxNaviDbContext NewContext() => new(new DbContextOptionsBuilder<TaxNaviDbContext>()
-        .UseNpgsql(ConnectionString, b => b.MigrationsAssembly("TaxNavi.Infrastructure"))
+        .UseNpgsql(ConnectionString, b => { b.MigrationsAssembly("TaxNavi.Infrastructure"); b.UseVector(); })
         .Options);
 
     public async Task InitializeAsync()
@@ -114,7 +115,7 @@ public sealed class PostgresFactAttribute : FactAttribute
     {
         if (!PostgresAvailable.IsAvailable)
         {
-            Skip = "PostgreSQL not available. Start one (docker run -d -p 5433:5432 -e POSTGRES_USER=taxnavi -e POSTGRES_PASSWORD=taxnavi_dev postgres:16-alpine) or set TAXNAVI_TEST_POSTGRES.";
+            Skip = "PostgreSQL not available. Start one (docker run -d --name taxnavi-pg-test -p 5433:5432 -e POSTGRES_USER=taxnavi -e POSTGRES_PASSWORD=taxnavi_dev pgvector/pgvector:pg16) or set TAXNAVI_TEST_POSTGRES.";
         }
     }
 }

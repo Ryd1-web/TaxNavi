@@ -20,10 +20,22 @@ public class TaxNaviDbContext : DbContext
     public DbSet<Payment> Payments { get; set; }
     public DbSet<Subscription> Subscriptions { get; set; }
     public DbSet<PaymentWebhookEvent> PaymentWebhookEvents { get; set; }
+    public DbSet<KnowledgeDocument> KnowledgeDocuments { get; set; }
+    public DbSet<DocumentChunk> DocumentChunks { get; set; }
+    public DbSet<ChatConversation> ChatConversations { get; set; }
+    public DbSet<ChatMessage> ChatMessages { get; set; }
+    public DbSet<AiUsageRecord> AiUsageRecords { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // pgvector: semantic search over knowledge-base chunks. The InMemory provider used by
+        // API tests cannot map Vector, so vector mapping is gated on the real provider.
+        if (Database.IsNpgsql())
+        {
+            modelBuilder.HasPostgresExtension("vector");
+        }
 
         // User configuration
         modelBuilder.Entity<User>(entity =>
@@ -144,6 +156,95 @@ public class TaxNaviDbContext : DbContext
             entity.HasIndex(e => e.EventKey).IsUnique();
             // Supports the retry worker's scan for unprocessed events.
             entity.HasIndex(e => new { e.Status, e.ReceivedAt });
+        });
+        // ----- AI knowledge base & assistant -----
+
+        modelBuilder.Entity<KnowledgeDocument>(entity =>
+        {
+            entity.HasKey(d => d.Id);
+            entity.Property(d => d.Title).IsRequired().HasMaxLength(300);
+            entity.Property(d => d.DocumentType).IsRequired().HasMaxLength(32);
+            entity.Property(d => d.SourceName).HasMaxLength(200);
+            entity.Property(d => d.SourceUrl).HasMaxLength(1000);
+            entity.Property(d => d.ContentHash).IsRequired().HasMaxLength(64);
+            entity.Property(d => d.Status).IsRequired().HasMaxLength(32);
+            entity.Property(d => d.LastError).HasMaxLength(1000);
+            entity.Property(d => d.FileName).HasMaxLength(260);
+            entity.Property(d => d.CreatedAt).HasDefaultValueSql("(now() at time zone 'utc')");
+            entity.HasIndex(d => d.ContentHash).IsUnique();   // the same PDF is never ingested twice
+            entity.HasIndex(d => new { d.Title, d.Version });
+            entity.HasIndex(d => d.Status);
+        });
+
+        modelBuilder.Entity<DocumentChunk>(entity =>
+        {
+            entity.HasKey(c => c.Id);
+            entity.Property(c => c.Content).IsRequired();
+            entity.Property(c => c.Chapter).HasMaxLength(200);
+            entity.Property(c => c.Part).HasMaxLength(200);
+            entity.Property(c => c.SectionNumber).HasMaxLength(16);
+            entity.Property(c => c.SectionTitle).HasMaxLength(200);
+            if (Database.IsNpgsql())
+            {
+                entity.Property(c => c.Embedding).HasColumnType($"vector({DocumentChunk.EmbeddingDimensions})");
+                // HNSW: approximate nearest-neighbour search by cosine distance.
+                entity.HasIndex(c => c.Embedding)
+                    .HasMethod("hnsw")
+                    .HasOperators("vector_cosine_ops");
+            }
+            else
+            {
+                entity.Ignore(c => c.Embedding);
+            }
+
+            entity.Property(c => c.CreatedAt).HasDefaultValueSql("(now() at time zone 'utc')");
+            entity.HasOne(c => c.Document)
+                .WithMany(d => d.Chunks)
+                .HasForeignKey(c => c.DocumentId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(c => new { c.DocumentId, c.ChunkIndex }).IsUnique();
+        });
+
+        modelBuilder.Entity<ChatConversation>(entity =>
+        {
+            entity.HasKey(c => c.Id);
+            entity.Property(c => c.Title).IsRequired().HasMaxLength(200);
+            entity.Property(c => c.GuestTokenHash).HasMaxLength(64);
+            entity.Property(c => c.CreatedAt).HasDefaultValueSql("(now() at time zone 'utc')");
+            entity.HasOne(c => c.User)
+                .WithMany()
+                .HasForeignKey(c => c.UserId)
+                .OnDelete(DeleteBehavior.Cascade);  // deleting an account removes their chats
+            entity.HasIndex(c => new { c.UserId, c.CreatedAt });
+        });
+
+        modelBuilder.Entity<ChatMessage>(entity =>
+        {
+            entity.HasKey(m => m.Id);
+            entity.Property(m => m.Role).IsRequired().HasMaxLength(16);
+            entity.Property(m => m.Content).IsRequired();
+            entity.Property(m => m.CitationsJson).HasColumnType("jsonb");
+            entity.Property(m => m.Grounding).HasMaxLength(32);
+            entity.Property(m => m.Model).HasMaxLength(100);
+            entity.Property(m => m.CreatedAt).HasDefaultValueSql("(now() at time zone 'utc')");
+            entity.HasOne(m => m.Conversation)
+                .WithMany(c => c.Messages)
+                .HasForeignKey(m => m.ConversationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(m => new { m.ConversationId, m.Ordinal }).IsUnique();
+        });
+
+        modelBuilder.Entity<AiUsageRecord>(entity =>
+        {
+            entity.HasKey(r => r.Id);
+            entity.Property(r => r.ClientKey).HasMaxLength(64);
+            entity.Property(r => r.Operation).IsRequired().HasMaxLength(32);
+            entity.Property(r => r.Model).HasMaxLength(100);
+            entity.Property(r => r.ErrorCategory).HasMaxLength(32);
+            entity.Property(r => r.CreatedAt).HasDefaultValueSql("(now() at time zone 'utc')");
+            // Quota checks: "how many successful calls since midnight for this user/client?"
+            entity.HasIndex(r => new { r.UserId, r.CreatedAt });
+            entity.HasIndex(r => new { r.ClientKey, r.CreatedAt });
         });
     }
 }

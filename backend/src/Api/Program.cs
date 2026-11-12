@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Pgvector.EntityFrameworkCore;
 using TaxNavi.Application.DTOs;
 using TaxNavi.Application.Services;
 using TaxNavi.Application.Validators;
@@ -14,6 +15,9 @@ using TaxNavi.Domain.Interfaces;
 using TaxNavi.Infrastructure.Data;
 using TaxNavi.Infrastructure.Repositories;
 using TaxNavi.Infrastructure.Services;
+
+// Local secrets live in the git-ignored .env at the repo root (same file Docker Compose reads).
+TaxNavi.Api.DotEnv.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -97,6 +101,9 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("calculate", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("RateLimits:CalculatePerMinute", 60), Window = TimeSpan.FromMinutes(1) }));
+    options.AddPolicy("ai", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("RateLimits:AiPerMinute", 10), Window = TimeSpan.FromMinutes(1) }));
     var checkoutLimit = builder.Configuration.GetValue("RateLimits:CheckoutPerMinute", 30);
     options.AddPolicy("checkout", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -121,7 +128,11 @@ builder.Services.AddDbContext<TaxNaviDbContext>(options =>
         return;
     }
 
-    options.UseNpgsql(connectionString, b => b.MigrationsAssembly("TaxNavi.Infrastructure"));
+    options.UseNpgsql(connectionString, b =>
+    {
+        b.MigrationsAssembly("TaxNavi.Infrastructure");
+        b.UseVector(); // pgvector mapping for knowledge-base embeddings
+    });
 });
 
 // Tax rules (versioned, per tax year)
@@ -146,6 +157,23 @@ if (string.IsNullOrWhiteSpace(paystackOptions.SecretKey))
 }
 builder.Services.AddSingleton(paystackOptions);
 builder.Services.AddSingleton(new SubscriptionOptions { SmePlanCode = paystackOptions.SmePlanCode });
+
+// Gemini (AI assistant): key from user secrets / environment only (GEMINI_API_KEY as fallback).
+var geminiOptions = builder.Configuration.GetSection("Gemini").Get<GeminiOptions>() ?? new GeminiOptions();
+if (string.IsNullOrWhiteSpace(geminiOptions.ApiKey))
+{
+    geminiOptions.ApiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
+}
+builder.Services.AddSingleton(geminiOptions);
+builder.Services.AddSingleton(builder.Configuration.GetSection("Ai").Get<AiOptions>() ?? new AiOptions());
+
+// Admins (knowledge-base management): configured by email, role claim added at sign-in.
+var adminOptions = builder.Configuration.GetSection("App:Admin").Get<AdminOptions>() ?? new AdminOptions();
+if (adminOptions.Emails.Count == 0 && Environment.GetEnvironmentVariable("ADMIN_EMAIL") is { Length: > 0 } adminEmail)
+{
+    adminOptions.Emails.Add(adminEmail);
+}
+builder.Services.AddSingleton(adminOptions);
 
 // JWT
 var jwt = JwtSettings.FromConfiguration(builder.Configuration);
@@ -184,6 +212,10 @@ builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
 builder.Services.AddScoped<IPaymentWebhookEventRepository, PaymentWebhookEventRepository>();
 builder.Services.AddScoped<IUnitOfWork, EfUnitOfWork>();
+builder.Services.AddScoped<IKnowledgeDocumentRepository, KnowledgeDocumentRepository>();
+builder.Services.AddScoped<IVectorSearchService, DocumentChunkRepository>();
+builder.Services.AddScoped<IChatConversationRepository, ChatConversationRepository>();
+builder.Services.AddScoped<IAiUsageRepository, AiUsageRepository>();
 
 // Services
 builder.Services.AddSingleton(TimeProvider.System);
@@ -197,6 +229,13 @@ builder.Services.AddScoped<IBillingService, BillingService>();
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 builder.Services.AddScoped<IPdfService, PdfReportService>();
 builder.Services.AddScoped<IBlobStorageService, BlobStorageService>();
+builder.Services.AddScoped<IDocumentIngestionService, DocumentIngestionService>();
+builder.Services.AddScoped<IRetrievalService, RetrievalService>();
+builder.Services.AddScoped<IAiAssistantService, RagAssistantService>();
+builder.Services.AddScoped<IReportExplanationService, ReportExplanationService>();
+builder.Services.AddScoped<RagEvaluationService>();
+builder.Services.AddHttpClient<ILlmService, GeminiLlmService>(client => client.Timeout = TimeSpan.FromSeconds(75));
+builder.Services.AddHttpClient<IEmbeddingService, GeminiEmbeddingService>(client => client.Timeout = TimeSpan.FromSeconds(75));
 builder.Services.AddHttpClient<IPaymentService, PaystackPaymentService>(client =>
 {
     client.BaseAddress = new Uri(paystackOptions.BaseUrl.EndsWith('/') ? paystackOptions.BaseUrl : paystackOptions.BaseUrl + "/");
@@ -211,6 +250,7 @@ if (builder.Configuration.GetValue("Webhooks:RetryEnabled", true))
 {
     builder.Services.AddHostedService<TaxNavi.Api.BackgroundServices.WebhookRetryWorker>();
 }
+builder.Services.AddHostedService<TaxNavi.Api.BackgroundServices.KnowledgeBaseSeeder>(); // indexes knowledge-base/manifest.json once, idempotently
 
 var app = builder.Build();
 

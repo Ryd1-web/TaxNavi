@@ -22,6 +22,8 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0
 RUN apt-get update     && apt-get install -y --no-install-recommends fontconfig fonts-dejavu-core fonts-liberation     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=publish /app/publish .
+# Seed corpus for the AI knowledge base (official gazettes + manifest), indexed on first start.
+COPY knowledge-base ./knowledge-base
 
 # Render sets PORT (the app binds to it); 8080 is the fallback for other hosts.
 ENV ASPNETCORE_URLS=http://+:8080     ASPNETCORE_ENVIRONMENT=Production

@@ -11,6 +11,7 @@ import { Button, ButtonLink } from '@/components/ui/Button';
 import { AlertTriangle, CheckCircle, Download, FileText, Info, Lock, Shield } from '@/components/ui/Icons';
 import { Alert, Badge, Card, Stat, VerificationBadge } from '@/components/ui/Primitives';
 import AssistantPanel from './AssistantPanel';
+import ExplainResults from './ExplainResults';
 import BandBreakdown from './BandBreakdown';
 import IncomeBreakdownBar from './IncomeBreakdownBar';
 
@@ -54,6 +55,8 @@ export default function TaxResults({ response, calculation, createdAt, onSave, o
               <UnlockCard response={response} onSave={onSave} resumeHref={resumeHref} calculation={calculation} guestAccessToken={guestAccessToken} />
             </div>
           )}
+
+          {calculation && !isCompany && <ExplainResults calculation={calculation} />}
 
           {s.vat.applicable && <VatCard vat={s.vat} />}
 

@@ -1,7 +1,11 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { progress } from '@/lib/progress';
 import {
+  AiChatResponse,
+  AiConversation,
+  AiConversationSummary,
   AssistantAnswer,
+  ExplainReportResponse,
   CheckoutResult,
   PaymentsConfig,
   Entitlements,
@@ -156,6 +160,33 @@ class ApiService {
 
   ask(question: string, options: { taxYear?: number; calculation?: TaxCalculationRequest } = {}) {
     return this.unwrap<AssistantAnswer>(this.api.post('/tax/assistant', { question, ...options }));
+  }
+
+  // AI assistant (RAG)
+  aiChat(body: {
+    question: string;
+    conversationId?: string;
+    guestToken?: string;
+    taxYear?: number;
+    calculation?: TaxCalculationRequest;
+  }) {
+    return this.unwrap<AiChatResponse>(this.api.post('/ai/assistant/chat', body));
+  }
+
+  aiConversations() {
+    return this.unwrap<AiConversationSummary[]>(this.api.get('/ai/assistant/conversations'));
+  }
+
+  aiConversation(id: string, guestToken?: string) {
+    return this.unwrap<AiConversation>(
+      this.api.get(`/ai/assistant/conversations/${id}`, {
+        headers: guestToken ? { 'X-Conversation-Token': guestToken } : undefined,
+      }),
+    );
+  }
+
+  explainReport(calculation: TaxCalculationRequest) {
+    return this.unwrap<ExplainReportResponse>(this.api.post('/ai/assistant/explain-report', { calculation }));
   }
 
   // Reports

@@ -26,18 +26,6 @@ public class GroundedTaxAssistantService : ITaxAssistantService
         "Explain my result"
     };
 
-    // Topics that need case-specific professional judgement.
-    private static readonly (string[] Keywords, string Topic)[] EscalationTopics =
-    {
-        (new[] { "penalt", "fine", "late payment", "interest on late" }, "Penalties"),
-        (new[] { "dispute", "objection", "appeal", "tribunal", "audit", "investigat" }, "Disputes and audits"),
-        (new[] { "crypto", "bitcoin", "digital asset" }, "Digital assets"),
-        (new[] { "capital gain", "sell my house", "sold shares", "sale of land" }, "Capital gains"),
-        (new[] { "non-resident", "nonresident", "abroad", "foreign income", "diaspora", "double tax" }, "Residency and foreign income"),
-        (new[] { "transfer pricing", "multinational", "group restructur" }, "Group and international tax"),
-        (new[] { "evade", "evasion", "hide income", "avoid paying" }, "Compliance")
-    };
-
     public GroundedTaxAssistantService(ITaxRuleProvider rules, ITaxCalculationEngine engine)
     {
         _rules = rules;
@@ -50,14 +38,9 @@ public class GroundedTaxAssistantService : ITaxAssistantService
         var rules = _rules.FindRuleSet(taxYear) ?? _rules.FindRuleSet(_rules.DefaultTaxYear)!;
         var q = (question.Question ?? string.Empty).Trim().ToLowerInvariant();
 
-        foreach (var (keywords, topic) in EscalationTopics)
+        if (EscalationPolicy.Match(q) is { } topic)
         {
-            if (keywords.Any(q.Contains))
-            {
-                return Build(rules, topic,
-                    $"{topic} depend on facts TaxNavi cannot assess from a calculator. Please speak to a chartered tax practitioner (CITN member) or contact the Nigeria Revenue Service or your State Internal Revenue Service directly. TaxNavi will not guess on this topic.",
-                    requiresAdvice: true, grounding: "Escalation policy");
-            }
+            return Build(rules, topic, EscalationPolicy.Message(topic), requiresAdvice: true, grounding: "Escalation policy");
         }
 
         FullTaxReportDto? report = null;

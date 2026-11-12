@@ -13,11 +13,13 @@ public class AuthenticationService : IAuthenticationService
 {
     private readonly IUserRepository _userRepository;
     private readonly JwtSettings _jwt;
+    private readonly AdminOptions _admins;
 
-    public AuthenticationService(IUserRepository userRepository, JwtSettings jwt)
+    public AuthenticationService(IUserRepository userRepository, JwtSettings jwt, AdminOptions admins)
     {
         _userRepository = userRepository;
         _jwt = jwt;
+        _admins = admins;
     }
 
     public async Task<AuthenticationResponse> RegisterAsync(RegisterRequest request)
@@ -61,7 +63,7 @@ public class AuthenticationService : IAuthenticationService
     {
         var credentials = new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwt.Secret)), SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new Claim(ClaimTypes.Email, user.Email),
@@ -70,6 +72,10 @@ public class AuthenticationService : IAuthenticationService
             new Claim("UserType", user.UserType),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
+        if (_admins.IsAdmin(user.Email))
+        {
+            claims.Add(new Claim(ClaimTypes.Role, "Admin"));
+        }
 
         var token = new JwtSecurityToken(
             issuer: _jwt.Issuer,

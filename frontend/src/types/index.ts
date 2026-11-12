@@ -302,3 +302,63 @@ export interface AssistantAnswer {
   sources: TaxSource[];
   suggestedQuestions: string[];
 }
+
+// ----- AI assistant (RAG) -----
+
+export interface AiCitation {
+  reference: string;
+  documentTitle: string;
+  documentType: 'Legislation' | 'Guidance';
+  sectionNumber?: string | null;
+  sectionTitle?: string | null;
+  chapter?: string | null;
+  part?: string | null;
+  pageFrom: number;
+  pageTo: number;
+  sourceName: string;
+  sourceUrl: string;
+  similarity: number;
+  snippet: string;
+}
+
+export type AiGrounding = 'retrieval' | 'rules' | 'escalation' | 'insufficient';
+
+export interface AiChatResponse {
+  conversationId: string;
+  guestToken?: string | null;
+  answer: string;
+  citations: AiCitation[];
+  grounding: AiGrounding;
+  confidence: 'high' | 'medium' | 'low';
+  requiresProfessionalAdvice: boolean;
+  disclaimer: string;
+  suggestedQuestions: string[];
+}
+
+export interface AiChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  citations: AiCitation[];
+  grounding?: AiGrounding | null;
+  createdAt: string;
+}
+
+export interface AiConversationSummary {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt?: string | null;
+}
+
+export interface AiConversation {
+  id: string;
+  title: string;
+  createdAt: string;
+  messages: AiChatMessage[];
+}
+
+export interface ExplainReportResponse {
+  explanation: string;
+  citations: AiCitation[];
+  disclaimer: string;
+}

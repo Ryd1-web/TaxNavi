@@ -25,6 +25,12 @@ A comprehensive web application for AI-powered tax advisory tailored for individ
 - **Payment Integration**: Paystack integration (placeholder for extension)
 - **Blob Storage**: PDF reports stored in Azure Blob Storage
 
+## AI tax assistant (RAG)
+
+TaxNavi includes a retrieval-augmented assistant grounded in the Nigeria Tax Act 2025, Tax Administration Act 2025 and the NRS / Joint Revenue Board Establishment Acts (official NASS gazettes in `backend/knowledge-base/`), plus an "Explain my results" feature for calculated reports. Powered by Google Gemini with vector search in PostgreSQL (pgvector). Set `GEMINI_API_KEY` to enable it; without a key the assistant answers from the reviewed rule set.
+
+Full design, learning notes and operating guide: [docs/AI_ASSISTANT.md](docs/AI_ASSISTANT.md).
+
 ## 🛠️ Tech Stack
 
 ### Backend
